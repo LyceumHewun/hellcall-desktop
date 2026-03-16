@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TitleBar } from "./components/TitleBar";
+import { CustomTitlebar } from "./components/CustomTitlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MacroCard } from "./components/MacroCard";
 import { Plus } from "lucide-react";
@@ -56,8 +56,8 @@ export default function App() {
   };
 
   return (
-    <div className="size-full flex flex-col bg-[#0F1115] overflow-hidden">
-      <TitleBar />
+    <div className="h-screen w-screen flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-[#0F1115]">
+      <CustomTitlebar />
 
       <div className="flex-1 flex overflow-hidden">
         <Sidebar activeNav={activeNav} setActiveNav={setActiveNav} />
