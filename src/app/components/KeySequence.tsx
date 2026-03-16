@@ -1,32 +1,60 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react';
-
-type Direction = 'up' | 'down' | 'left' | 'right';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 
 interface KeySequenceProps {
-  sequence?: Direction[];
+  sequence?: string[];
   onEdit?: () => void;
   compact?: boolean;
 }
 
-const directionIcons = {
+const directionIcons: Record<string, any> = {
   up: ArrowUp,
   down: ArrowDown,
   left: ArrowLeft,
   right: ArrowRight,
+  UP: ArrowUp,
+  DOWN: ArrowDown,
+  LEFT: ArrowLeft,
+  RIGHT: ArrowRight,
 };
 
-export function KeySequence({ sequence = ['down', 'down', 'left', 'up', 'right'], onEdit, compact = false }: KeySequenceProps) {
+export function KeySequence({
+  sequence = ["OPEN", "DOWN", "LEFT", "UP", "RIGHT", "THROW"],
+  onEdit,
+  compact = false,
+}: KeySequenceProps) {
   if (compact) {
     return (
       <div className="flex items-center gap-1.5">
-        {sequence.map((direction, index) => {
-          const Icon = directionIcons[direction];
+        {sequence.map((key, index) => {
+          const upperKey = key.toUpperCase();
+          if (upperKey === "OPEN") {
+            return (
+              <div
+                key={index}
+                className="px-1.5 h-7 bg-cyan-900 border border-cyan-500 text-cyan-50 rounded flex items-center justify-center text-[10px] font-bold"
+              >
+                OPN
+              </div>
+            );
+          }
+          if (upperKey === "THROW") {
+            return (
+              <div
+                key={index}
+                className="px-1.5 h-7 bg-red-900 border border-red-500 text-red-50 rounded flex items-center justify-center text-[10px] font-bold"
+              >
+                THR
+              </div>
+            );
+          }
+
+          const Icon = directionIcons[upperKey] || ArrowDown;
           return (
             <div
               key={index}
               className="w-7 h-7 bg-[#0F1115] border border-[#FCE100] rounded flex items-center justify-center group"
               style={{
-                boxShadow: '0 0 8px rgba(252, 225, 0, 0.15)',
+                boxShadow: "0 0 8px rgba(252, 225, 0, 0.15)",
               }}
             >
               <Icon className="w-4 h-4 text-[#FCE100]" strokeWidth={2.5} />
@@ -50,23 +78,49 @@ export function KeySequence({ sequence = ['down', 'down', 'left', 'up', 'right']
       </div>
 
       <div className="flex items-center gap-2 p-4 bg-black/30 rounded border border-white/5">
-        {sequence.map((direction, index) => {
-          const Icon = directionIcons[direction];
+        {sequence.map((key, index) => {
+          const upperKey = key.toUpperCase();
+
+          if (upperKey === "OPEN") {
+            return (
+              <div
+                key={index}
+                className="px-3 h-12 bg-cyan-900 border border-cyan-500 text-cyan-50 rounded flex items-center justify-center text-sm font-bold shadow-[0_0_15px_rgba(6,182,212,0.2)]"
+              >
+                [ OPN ]
+              </div>
+            );
+          }
+          if (upperKey === "THROW") {
+            return (
+              <div
+                key={index}
+                className="px-3 h-12 bg-red-900 border border-red-500 text-red-50 rounded flex items-center justify-center text-sm font-bold shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+              >
+                [ THR ]
+              </div>
+            );
+          }
+
+          const Icon = directionIcons[upperKey] || ArrowDown;
           return (
             <div
               key={index}
               className="relative w-12 h-12 bg-gradient-to-b from-[#2A2D35] to-[#1E2128] rounded border border-[#FCE100]/50 flex items-center justify-center group"
               style={{
-                boxShadow: '0 0 15px rgba(252, 225, 0, 0.2)',
+                boxShadow: "0 0 15px rgba(252, 225, 0, 0.2)",
               }}
             >
               <div
                 className="absolute inset-0 bg-[#FCE100]/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{
-                  animation: 'glow 1.5s ease-in-out infinite',
+                  animation: "glow 1.5s ease-in-out infinite",
                 }}
               />
-              <Icon className="w-6 h-6 text-[#FCE100] relative z-10" strokeWidth={2.5} />
+              <Icon
+                className="w-6 h-6 text-[#FCE100] relative z-10"
+                strokeWidth={2.5}
+              />
             </div>
           );
         })}
