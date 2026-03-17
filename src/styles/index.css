@@ -2,6 +2,12 @@
 @import "./tailwind.css";
 @import "./theme.css";
 
+/* Global overrides */
+body {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 /* Custom sleek scrollbar for Tauri WebView */
 ::-webkit-scrollbar {
     width: 6px;
