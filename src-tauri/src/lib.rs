@@ -1,6 +1,42 @@
-use hellcall::Config;
+use hellcall::{Config, HellcallEngine};
 use std::fs;
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
+
+struct AppState {
+    engine: Mutex<Option<HellcallEngine>>,
+}
+
+#[tauri::command]
+fn start_engine(state: State<'_, AppState>, config: Config) -> Result<String, String> {
+    let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
+    if engine_guard.is_some() {
+        return Ok("Already started".into());
+    }
+
+    let model_path = std::env::current_dir()
+        .map_err(|e| e.to_string())?
+        .join("model");
+
+    let model_path_str = model_path
+        .to_str()
+        .ok_or_else(|| "Invalid model path".to_string())?;
+
+    let engine =
+        HellcallEngine::start(config, model_path_str, None, None).map_err(|e| e.to_string())?;
+
+    *engine_guard = Some(engine);
+    Ok("Started".into())
+}
+
+#[tauri::command]
+fn stop_engine(state: State<'_, AppState>) -> Result<String, String> {
+    let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
+    if let Some(engine) = engine_guard.take() {
+        engine.stop();
+    }
+    Ok("Stopped".into())
+}
 
 #[tauri::command]
 fn load_config(app: AppHandle) -> Result<Config, String> {
@@ -40,7 +76,15 @@ fn save_config(app: AppHandle, new_config: Config) -> Result<bool, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![load_config, save_config])
+        .manage(AppState {
+            engine: Mutex::new(None),
+        })
+        .invoke_handler(tauri::generate_handler![
+            load_config,
+            save_config,
+            start_engine,
+            stop_engine
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

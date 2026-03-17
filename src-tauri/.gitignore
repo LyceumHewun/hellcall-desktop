@@ -9,3 +9,11 @@
 # Lib
 /lib/*
 !/lib/.gitkeep
+
+# model
+/model/*
+!/model/.gitkeep
+
+# audio
+/audio/*
+!/audio/.gitkeep

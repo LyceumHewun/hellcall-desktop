@@ -1,28 +1,73 @@
 import { useState } from "react";
 import { Settings, Keyboard, Command } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useConfigStore } from "../../store/configStore";
+import { AppConfig } from "../../types/config";
 
 interface SidebarProps {
   activeNav: string;
   setActiveNav: (nav: string) => void;
 }
 
+type EngineStatus = "OFFLINE" | "STARTING" | "ACTIVE";
+
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
-  const [isActive, setIsActive] = useState(false);
+  const [status, setStatus] = useState<EngineStatus>("OFFLINE");
+
+  const toggleEngine = async () => {
+    if (status === "OFFLINE") {
+      setStatus("STARTING");
+      try {
+        const state = useConfigStore.getState();
+        if (!state.config) throw new Error("Config not loaded");
+
+        const sanitizedConfig = JSON.parse(
+          JSON.stringify(state.config),
+        ) as AppConfig;
+        sanitizedConfig.commands = sanitizedConfig.commands
+          .filter((cmd) => cmd.command.trim() !== "" && cmd.keys.length > 0)
+          .map((cmd: any) => {
+            if (cmd.grammar && cmd.grammar.trim() === "") {
+              cmd.grammar = null;
+            }
+            delete cmd._frontendId;
+            return cmd;
+          });
+
+        await invoke("start_engine", { config: sanitizedConfig });
+        setStatus("ACTIVE");
+      } catch (error) {
+        console.error("Failed to start engine:", error);
+        setStatus("OFFLINE");
+      }
+    } else if (status === "ACTIVE") {
+      try {
+        await invoke("stop_engine");
+        setStatus("OFFLINE");
+      } catch (error) {
+        console.error("Failed to stop engine:", error);
+      }
+    }
+  };
+
+  const isActive = status === "ACTIVE";
+  const isStarting = status === "STARTING";
 
   return (
     <div className="w-64 bg-[#0F1115] border-r border-white/10 flex flex-col p-4 gap-6">
       {/* Status Toggle */}
       <button
-        onClick={() => setIsActive(!isActive)}
+        onClick={toggleEngine}
+        disabled={isStarting}
         className={`relative overflow-hidden transition-all duration-300 ${
-          isActive
+          isActive || isStarting
             ? "bg-[#FCE100] border-[#FCE100] shadow-[0_0_20px_rgba(252,225,0,0.3)]"
             : "bg-transparent border-white/20"
-        } border-2 rounded p-4 group`}
+        } ${isStarting ? "animate-pulse" : ""} border-2 rounded p-4 group disabled:opacity-80`}
       >
         <div
           className={`absolute inset-0 transition-opacity duration-1000 ${
-            isActive ? "opacity-100" : "opacity-0"
+            isActive || isStarting ? "opacity-100" : "opacity-0"
           }`}
           style={{
             background:
@@ -32,19 +77,25 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         />
         <div className="relative flex flex-col items-center gap-2">
           <div
-            className={`w-3 h-3 rounded-full ${isActive ? "bg-black" : "bg-[#FCE100]"}`}
+            className={`w-3 h-3 rounded-full ${
+              isActive || isStarting ? "bg-black" : "bg-[#FCE100]"
+            }`}
           />
           <span
             style={{ fontFamily: "var(--font-family-tech)" }}
-            className={`tracking-wider ${isActive ? "text-black" : "text-white/70"}`}
+            className={`tracking-wider ${
+              isActive || isStarting ? "text-black" : "text-white/70"
+            }`}
           >
             VOICE LINK
           </span>
           <span
             style={{ fontFamily: "var(--font-family-tech)" }}
-            className={`tracking-wider ${isActive ? "text-black" : "text-white/50"}`}
+            className={`tracking-wider ${
+              isActive || isStarting ? "text-black" : "text-white/50"
+            }`}
           >
-            {isActive ? "ACTIVE" : "OFFLINE"}
+            {isStarting ? "LINKING..." : isActive ? "LINK ACTIVE" : "OFFLINE"}
           </span>
         </div>
       </button>
