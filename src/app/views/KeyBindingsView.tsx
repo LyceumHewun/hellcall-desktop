@@ -2,27 +2,22 @@ import { useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
 import { KeyRecorder, RustInput } from "../components/KeyRecorder";
 import { KeySequence } from "../components/KeySequence";
+import { useConfigStore } from "../../store/configStore";
 
 export function KeyBindingsView() {
-  const [bindings, setBindings] = useState<Record<string, RustInput>>({
-    UP: "UpArrow",
-    DOWN: "DownArrow",
-    LEFT: "LeftArrow",
-    RIGHT: "RightArrow",
-    OPEN: "ControlLeft",
-    THROW: "Space",
-    RESEND: "KeyR",
-  });
+  const { config, updateConfig } = useConfigStore();
 
   const [activeRecordingAction, setActiveRecordingAction] = useState<
     string | null
   >(null);
 
+  if (!config) return null;
+  const bindings = config.key_map;
+
   const handleKeyRecorded = (action: string, newKeyCode: RustInput) => {
-    setBindings((prev) => ({
-      ...prev,
-      [action]: newKeyCode,
-    }));
+    updateConfig((c) => {
+      c.key_map[action] = newKeyCode as any;
+    });
     setActiveRecordingAction(null);
   };
 
@@ -47,29 +42,37 @@ export function KeyBindingsView() {
         <div className="max-w-3xl mx-auto space-y-6">
           <Card className="bg-[#1E2128] border-white/10">
             <CardContent className="p-0 divide-y divide-white/10 [&:last-child]:pb-0">
-              {Object.entries(bindings).map(([action, keyName]) => (
-                <div
-                  key={action}
-                  className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="min-w-12 text-white/50 font-mono text-sm">
-                      {action}
-                    </span>
-                    <KeySequence sequence={[action]} compact />
-                  </div>
-                  <KeyRecorder
-                    actionName={action}
-                    currentKeyCode={keyName}
-                    isRecording={activeRecordingAction === action}
-                    onStartRecording={() => setActiveRecordingAction(action)}
-                    onKeyRecorded={(newKeyCode) =>
-                      handleKeyRecorded(action, newKeyCode)
-                    }
-                    onCancelRecording={() => setActiveRecordingAction(null)}
-                  />
-                </div>
-              ))}
+              {["UP", "DOWN", "LEFT", "RIGHT", "OPEN", "THROW", "RESEND"].map(
+                (action) => {
+                  const keyName = bindings[action];
+                  if (!keyName) return null;
+                  return (
+                    <div
+                      key={action}
+                      className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="min-w-12 text-white/50 font-mono text-sm">
+                          {action}
+                        </span>
+                        <KeySequence sequence={[action]} compact />
+                      </div>
+                      <KeyRecorder
+                        actionName={action}
+                        currentKeyCode={keyName as RustInput}
+                        isRecording={activeRecordingAction === action}
+                        onStartRecording={() =>
+                          setActiveRecordingAction(action)
+                        }
+                        onKeyRecorded={(newKeyCode) =>
+                          handleKeyRecorded(action, newKeyCode)
+                        }
+                        onCancelRecording={() => setActiveRecordingAction(null)}
+                      />
+                    </div>
+                  );
+                },
+              )}
             </CardContent>
           </Card>
         </div>

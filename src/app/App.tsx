@@ -3,62 +3,96 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CustomTitlebar } from "./components/CustomTitlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MacroCard } from "./components/MacroCard";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { GlobalSettingsView } from "./views/GlobalSettingsView";
 import { KeyBindingsView } from "./views/KeyBindingsView";
+import { useConfigStore } from "../store/configStore";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 export default function App() {
-  useEffect(() => {
-    getCurrentWindow().show();
-  }, []);
-
+  const { config, isLoading, fetchConfig, updateConfig } = useConfigStore();
   const [activeNav, setActiveNav] = useState("macros");
-  const [macros, setMacros] = useState([
-    {
-      id: "1",
-      voiceTrigger: "orbital strike",
-      engineGrammar: "[orbital] [strike|bombardment]",
-      responseAudio: ["confirm_orbital.wav"],
-    },
-    {
-      id: "2",
-      voiceTrigger: "resupply",
-      engineGrammar: "[resupply|ammo|supplies]",
-      responseAudio: ["confirm_resupply.wav"],
-    },
-    {
-      id: "3",
-      voiceTrigger: "eagle airstrike",
-      engineGrammar: "[eagle] [airstrike|air strike]",
-      responseAudio: ["confirm_eagle.wav"],
-    },
-    {
-      id: "4",
-      voiceTrigger: "reinforce",
-      engineGrammar: "[reinforce|reinforcement|backup]",
-      responseAudio: ["confirm_reinforce.wav"],
-    },
-    {
-      id: "5",
-      voiceTrigger: "sos beacon",
-      engineGrammar: "[sos|emergency] [beacon]",
-      responseAudio: ["confirm_sos.wav"],
-    },
-  ]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  useEffect(() => {
+    if (!isLoading && config) {
+      getCurrentWindow().show();
+    }
+  }, [isLoading, config]);
 
   const addMacro = () => {
-    const newMacro = {
-      id: Date.now().toString(),
-      voiceTrigger: "",
-      engineGrammar: "",
-      responseAudio: [],
-    };
-    setMacros([...macros, newMacro]);
+    updateConfig((draft) => {
+      draft.commands.push({
+        _frontendId: crypto.randomUUID(),
+        command: "",
+        grammar: null,
+        shortcut: null,
+        keys: [],
+        audio_files: [],
+      });
+    });
   };
 
-  const deleteMacro = (id: string) => {
-    setMacros(macros.filter((m) => m.id !== id));
+  const deleteMacro = (index: number) => {
+    updateConfig((draft) => {
+      draft.commands.splice(index, 1);
+    });
   };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      updateConfig((draft) => {
+        const oldIndex = draft.commands.findIndex(
+          (cmd) => cmd._frontendId === active.id,
+        );
+        const newIndex = draft.commands.findIndex(
+          (cmd) => cmd._frontendId === over.id,
+        );
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          draft.commands = arrayMove(draft.commands, oldIndex, newIndex);
+        }
+      });
+    }
+  };
+
+  if (isLoading || !config) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#0F1115]">
+        <Loader2 className="w-8 h-8 text-[#FCE100] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-[#0F1115]">
@@ -96,13 +130,29 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="max-w-6xl mx-auto flex flex-col gap-2">
-                  {macros.map((macro) => (
-                    <MacroCard
-                      key={macro.id}
-                      initialData={macro as any}
-                      onDelete={() => deleteMacro(macro.id)}
-                    />
-                  ))}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={config.commands.map((cmd) => cmd._frontendId!)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {config.commands.map((cmd, index) => {
+                        const id = cmd._frontendId!;
+                        return (
+                          <MacroCard
+                            key={id}
+                            id={id}
+                            commandIndex={index}
+                            command={cmd}
+                            onDelete={() => deleteMacro(index)}
+                          />
+                        );
+                      })}
+                    </SortableContext>
+                  </DndContext>
                 </div>
               </div>
             </>

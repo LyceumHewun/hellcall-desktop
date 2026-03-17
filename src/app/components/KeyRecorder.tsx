@@ -86,6 +86,7 @@ interface KeyRecorderProps {
   onStartRecording: () => void;
   onKeyRecorded: (newKeyCode: RustInput) => void;
   onCancelRecording: () => void;
+  onClear?: () => void;
 }
 
 export function KeyRecorder({
@@ -95,6 +96,7 @@ export function KeyRecorder({
   onStartRecording,
   onKeyRecorded,
   onCancelRecording,
+  onClear,
 }: KeyRecorderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +108,14 @@ export function KeyRecorder({
       event.stopPropagation();
 
       if (event.code === "Escape") {
+        onCancelRecording();
+        return;
+      }
+
+      if (event.code === "Delete" || event.code === "Backspace") {
+        if (onClear) {
+          onClear();
+        }
         onCancelRecording();
         return;
       }

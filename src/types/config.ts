@@ -15,6 +15,7 @@ export interface TriggerConfig {
 }
 
 export interface CommandConfig {
+  _frontendId?: string;
   command: string;
   grammar: string | null;
   shortcut: string | null;
