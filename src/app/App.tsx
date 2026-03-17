@@ -64,45 +64,43 @@ export default function App() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="border-b border-white/10 p-6 bg-gradient-to-b from-[#0F1115] to-transparent backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1
-                  style={{ fontFamily: "var(--font-family-tech)" }}
-                  className="tracking-wider text-white mb-1"
-                >
-                  VOICE COMMAND ARSENAL
-                </h1>
-                <p className="text-white/50 text-sm">
-                  Configure tactical voice-activated macros
-                </p>
-              </div>
-              {activeNav === "macros" && (
-                <button
-                  onClick={addMacro}
-                  className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#FCE100] text-[#FCE100] rounded hover:bg-[#FCE100]/10 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Macro</span>
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Views */}
           {activeNav === "macros" && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-6xl mx-auto flex flex-col gap-2">
-                {macros.map((macro) => (
-                  <MacroCard
-                    key={macro.id}
-                    initialData={macro as any}
-                    onDelete={() => deleteMacro(macro.id)}
-                  />
-                ))}
+            <>
+              <div className="border-b border-white/10 p-6 shrink-0 bg-gradient-to-b from-[#0F1115] to-transparent backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1
+                      style={{ fontFamily: "var(--font-family-tech)" }}
+                      className="tracking-wider text-white mb-1"
+                    >
+                      VOICE COMMAND ARSENAL
+                    </h1>
+                    <p className="text-white/50 text-sm">
+                      Configure tactical voice-activated macros
+                    </p>
+                  </div>
+                  <button
+                    onClick={addMacro}
+                    className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#FCE100] text-[#FCE100] rounded hover:bg-[#FCE100]/10 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Macro</span>
+                  </button>
+                </div>
               </div>
-            </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="max-w-6xl mx-auto flex flex-col gap-2">
+                  {macros.map((macro) => (
+                    <MacroCard
+                      key={macro.id}
+                      initialData={macro as any}
+                      onDelete={() => deleteMacro(macro.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
           )}
           {activeNav === "settings" && <GlobalSettingsView />}
           {activeNav === "keybindings" && <KeyBindingsView />}

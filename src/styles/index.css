@@ -1,3 +1,22 @@
-@import './fonts.css';
-@import './tailwind.css';
-@import './theme.css';
+@import "./fonts.css";
+@import "./tailwind.css";
+@import "./theme.css";
+
+/* Custom sleek scrollbar for Tauri WebView */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #27272a; /* Tailwind zinc-800 */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #3f3f46; /* Tailwind zinc-700 */
+}

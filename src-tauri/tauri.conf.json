@@ -16,7 +16,10 @@
         "width": 1024,
         "height": 720,
         "decorations": false,
-        "transparent": true
+        "transparent": true,
+        "resizable": false,
+        "fullscreen": false,
+        "maximized": false
       }
     ],
     "security": {
