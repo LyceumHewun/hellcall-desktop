@@ -15,11 +15,13 @@
         "title": "hellcall-desktop",
         "width": 1024,
         "height": 720,
+        "center": true,
         "decorations": false,
         "transparent": true,
         "resizable": false,
         "fullscreen": false,
-        "maximized": false
+        "maximized": false,
+        "visible": false
       }
     ],
     "security": {

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CustomTitlebar } from "./components/CustomTitlebar";
 import { Sidebar } from "./components/Sidebar";
 import { MacroCard } from "./components/MacroCard";
@@ -7,6 +8,10 @@ import { GlobalSettingsView } from "./views/GlobalSettingsView";
 import { KeyBindingsView } from "./views/KeyBindingsView";
 
 export default function App() {
+  useEffect(() => {
+    getCurrentWindow().show();
+  }, []);
+
   const [activeNav, setActiveNav] = useState("macros");
   const [macros, setMacros] = useState([
     {
