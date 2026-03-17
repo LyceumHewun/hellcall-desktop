@@ -22,4 +22,4 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
+hellcall = { git = "https://github.com/LyceumHewun/hellcall.git", rev = "b8cb49c" }
