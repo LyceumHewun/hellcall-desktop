@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
-import { Button } from "../components/ui/button";
+import { KeyRecorder, RustInput } from "../components/KeyRecorder";
 
 export function KeyBindingsView() {
-  const [bindings, setBindings] = useState({
+  const [bindings, setBindings] = useState<Record<string, RustInput>>({
     UP: "UpArrow",
     DOWN: "DownArrow",
     LEFT: "LeftArrow",
@@ -13,10 +13,16 @@ export function KeyBindingsView() {
     THROW: "Space",
   });
 
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeRecordingAction, setActiveRecordingAction] = useState<
+    string | null
+  >(null);
 
-  const handleKeyClick = (action: string) => {
-    setActiveKey(action);
+  const handleKeyRecorded = (action: string, newKeyCode: RustInput) => {
+    setBindings((prev) => ({
+      ...prev,
+      [action]: newKeyCode,
+    }));
+    setActiveRecordingAction(null);
   };
 
   return (
@@ -48,17 +54,16 @@ export function KeyBindingsView() {
                   <span className="text-white/50 font-mono text-sm">
                     {action}
                   </span>
-                  <Button
-                    variant="outline"
-                    className={
-                      activeKey === action
-                        ? "bg-[#FCE100] text-black hover:bg-[#FCE100]/90 border-[#FCE100]"
-                        : "bg-black/30 border-white/10 text-white hover:bg-white/10 hover:text-white"
+                  <KeyRecorder
+                    actionName={action}
+                    currentKeyCode={keyName}
+                    isRecording={activeRecordingAction === action}
+                    onStartRecording={() => setActiveRecordingAction(action)}
+                    onKeyRecorded={(newKeyCode) =>
+                      handleKeyRecorded(action, newKeyCode)
                     }
-                    onClick={() => handleKeyClick(action)}
-                  >
-                    {activeKey === action ? "Press any key..." : keyName}
-                  </Button>
+                    onCancelRecording={() => setActiveRecordingAction(null)}
+                  />
                 </div>
               ))}
             </CardContent>
