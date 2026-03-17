@@ -52,15 +52,15 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex flex-col gap-1">
         <button
-          onClick={() => setActiveNav("settings")}
+          onClick={() => setActiveNav("macros")}
           className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-            activeNav === "settings"
+            activeNav === "macros"
               ? "bg-white/10 text-white"
               : "text-white/60 hover:bg-white/5 hover:text-white/80"
           }`}
         >
-          <Settings className="w-4 h-4" />
-          <span>Global Settings</span>
+          <Command className="w-4 h-4" />
+          <span>Stratagem Macros</span>
         </button>
 
         <button
@@ -76,15 +76,15 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         </button>
 
         <button
-          onClick={() => setActiveNav("macros")}
+          onClick={() => setActiveNav("settings")}
           className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-            activeNav === "macros"
+            activeNav === "settings"
               ? "bg-white/10 text-white"
               : "text-white/60 hover:bg-white/5 hover:text-white/80"
           }`}
         >
-          <Command className="w-4 h-4" />
-          <span>Stratagem Macros</span>
+          <Settings className="w-4 h-4" />
+          <span>Global Settings</span>
         </button>
       </nav>
 

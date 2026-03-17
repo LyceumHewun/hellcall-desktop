@@ -48,7 +48,11 @@ export function KeySequence({
             );
           }
 
-          const Icon = directionIcons[upperKey] || ArrowDown;
+          if (!directionIcons[upperKey]) {
+            return <div>{/* empty */}</div>;
+          }
+
+          const Icon = directionIcons[upperKey];
           return (
             <div
               key={index}
@@ -100,6 +104,10 @@ export function KeySequence({
                 [ THR ]
               </div>
             );
+          }
+
+          if (!directionIcons[upperKey]) {
+            return <div>{/* empty */}</div>;
           }
 
           const Icon = directionIcons[upperKey] || ArrowDown;

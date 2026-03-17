@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
 import { KeyRecorder, RustInput } from "../components/KeyRecorder";
+import { KeySequence } from "../components/KeySequence";
 
 export function KeyBindingsView() {
   const [bindings, setBindings] = useState<Record<string, RustInput>>({
@@ -9,8 +10,8 @@ export function KeyBindingsView() {
     LEFT: "LeftArrow",
     RIGHT: "RightArrow",
     OPEN: "ControlLeft",
-    RESEND: "KeyR",
     THROW: "Space",
+    RESEND: "KeyR",
   });
 
   const [activeRecordingAction, setActiveRecordingAction] = useState<
@@ -45,15 +46,18 @@ export function KeyBindingsView() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-6">
           <Card className="bg-[#1E2128] border-white/10">
-            <CardContent className="p-0 divide-y divide-white/10">
+            <CardContent className="p-0 divide-y divide-white/10 [&:last-child]:pb-0">
               {Object.entries(bindings).map(([action, keyName]) => (
                 <div
                   key={action}
                   className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
                 >
-                  <span className="text-white/50 font-mono text-sm">
-                    {action}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="min-w-12 text-white/50 font-mono text-sm">
+                      {action}
+                    </span>
+                    <KeySequence sequence={[action]} compact />
+                  </div>
                   <KeyRecorder
                     actionName={action}
                     currentKeyCode={keyName}
