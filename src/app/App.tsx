@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { GlobalSettingsView } from "./views/GlobalSettingsView";
 import { KeyBindingsView } from "./views/KeyBindingsView";
 import { MacrosView } from "./views/MacrosView";
+import { LogView } from "./views/LogView";
 import { useConfigStore } from "../store/configStore";
 
 export default function App() {
@@ -43,6 +44,7 @@ export default function App() {
           {activeNav === "macros" && <MacrosView />}
           {activeNav === "settings" && <GlobalSettingsView />}
           {activeNav === "keybindings" && <KeyBindingsView />}
+          {activeNav === "log" && <LogView />}
         </div>
       </div>
     </div>

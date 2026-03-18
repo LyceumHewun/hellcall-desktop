@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings, Keyboard, Command } from "lucide-react";
+import { Settings, Keyboard, Command, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
 import { AppConfig } from "../../types/config";
@@ -124,6 +124,18 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         >
           <Keyboard className="w-4 h-4" />
           <span>Key Bindings</span>
+        </button>
+
+        <button
+          onClick={() => setActiveNav("log")}
+          className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+            activeNav === "log"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:bg-white/5 hover:text-white/80"
+          }`}
+        >
+          <Terminal className="w-4 h-4" />
+          <span>Terminal Log</span>
         </button>
 
         <button
