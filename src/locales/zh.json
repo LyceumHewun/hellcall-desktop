@@ -1,0 +1,64 @@
+{
+  "nav": {
+    "macros": "宏命令",
+    "keybindings": "按键映射",
+    "settings": "全局设置",
+    "log": "终端日志"
+  },
+  "status": {
+    "voice_link": "VOICE LINK",
+    "offline": "离线",
+    "linking": "连接中...",
+    "active": "连接成功"
+  },
+  "macros": {
+    "title": "语音指令库",
+    "subtitle": "配置战术语音宏命令",
+    "add_new": "添加宏",
+    "card": {
+      "trigger": "语音触发词",
+      "unsaved": "未保存: 缺少触发词或按键序列",
+      "stop_recording": "停止录制 (Esc)",
+      "record_seq": "录制按键序列 (清除当前)",
+      "advanced": "高级设置",
+      "delete": "删除宏",
+      "grammar": "引擎语法",
+      "shortcut": "备用快捷键",
+      "audio": "响应音频",
+      "audio_placeholder": "输入文件名并按回车"
+    }
+  },
+  "bindings": {
+    "title": "硬件按键绑定",
+    "subtitle": "将逻辑指令映射到物理按键",
+    "action": {
+      "up": "上",
+      "down": "下",
+      "left": "左",
+      "right": "右",
+      "open": "打开战备菜单",
+      "throw": "投掷信标",
+      "resend": "重新发送指令"
+    }
+  },
+  "settings": {
+    "title": "全局配置",
+    "subtitle": "调整语音识别与按键引擎行为",
+    "app_preferences": "应用偏好",
+    "language": "语言 / Language",
+    "trigger": "Trigger",
+    "hit_word": "唤醒词",
+    "hit_word_grammar": "唤醒词语法",
+    "key_presser": "Key Presser",
+    "wait_open_time": "等待战备菜单打开 (毫秒)",
+    "key_release_interval": "按键释放间隔 (毫秒)",
+    "diff_key_interval": "不同按键间隔 (毫秒)",
+    "recognizer": "Recognizer",
+    "chunk_time": "音频流识别块时长 ({{val}}) (秒)",
+    "vad_silence": "VAD 静音检测时长 ({{val}}) (毫秒)"
+  },
+  "log": {
+    "waiting": "等待日志...",
+    "scroll_bottom": "↓ 滚动到底部"
+  }
+}

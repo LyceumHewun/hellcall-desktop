@@ -3,6 +3,7 @@ import { Settings, Keyboard, Command, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
 import { AppConfig } from "../../types/config";
+import { useTranslation } from "react-i18next";
 
 interface SidebarProps {
   activeNav: string;
@@ -12,6 +13,7 @@ interface SidebarProps {
 type EngineStatus = "OFFLINE" | "STARTING" | "ACTIVE";
 
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<EngineStatus>("OFFLINE");
 
   const toggleEngine = async () => {
@@ -87,7 +89,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
               isActive || isStarting ? "text-black" : "text-white/70"
             }`}
           >
-            VOICE LINK
+            {t("status.voice_link")}
           </span>
           <span
             style={{ fontFamily: "var(--font-family-tech)" }}
@@ -95,7 +97,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
               isActive || isStarting ? "text-black" : "text-white/50"
             }`}
           >
-            {isStarting ? "LINKING..." : isActive ? "LINK ACTIVE" : "OFFLINE"}
+            {isStarting ? t("status.linking") : isActive ? t("status.active") : t("status.offline")}
           </span>
         </div>
       </button>
@@ -111,7 +113,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           }`}
         >
           <Command className="w-4 h-4" />
-          <span>Stratagem Macros</span>
+          <span>{t("nav.macros")}</span>
         </button>
 
         <button
@@ -123,7 +125,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           }`}
         >
           <Keyboard className="w-4 h-4" />
-          <span>Key Bindings</span>
+          <span>{t("nav.keybindings")}</span>
         </button>
 
         <button
@@ -135,7 +137,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           }`}
         >
           <Terminal className="w-4 h-4" />
-          <span>Terminal Log</span>
+          <span>{t("nav.log")}</span>
         </button>
 
         <button
@@ -147,7 +149,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           }`}
         >
           <Settings className="w-4 h-4" />
-          <span>Global Settings</span>
+          <span>{t("nav.settings")}</span>
         </button>
       </nav>
 

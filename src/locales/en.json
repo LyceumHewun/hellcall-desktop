@@ -1,0 +1,64 @@
+{
+  "nav": {
+    "macros": "Stratagem Macros",
+    "keybindings": "Key Bindings",
+    "settings": "Global Settings",
+    "log": "Terminal Log"
+  },
+  "status": {
+    "voice_link": "VOICE LINK",
+    "offline": "OFFLINE",
+    "linking": "LINKING...",
+    "active": "LINK ACTIVE"
+  },
+  "macros": {
+    "title": "VOICE COMMAND ARSENAL",
+    "subtitle": "Configure tactical voice-activated macros",
+    "add_new": "Add New Macro",
+    "card": {
+      "trigger": "voice trigger",
+      "unsaved": "Unsaved: Missing trigger or sequence",
+      "stop_recording": "Stop Recording (Esc)",
+      "record_seq": "Record Sequence (clears current)",
+      "advanced": "Advanced Settings",
+      "delete": "Delete Macro",
+      "grammar": "Engine Grammar",
+      "shortcut": "Fallback Shortcut",
+      "audio": "Response Audio",
+      "audio_placeholder": "Type filename and press Enter"
+    }
+  },
+  "bindings": {
+    "title": "HARDWARE KEY BINDINGS",
+    "subtitle": "Map logical commands to physical keyboard inputs",
+    "action": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right",
+      "open": "Open",
+      "throw": "Throw",
+      "resend": "Resend"
+    }
+  },
+  "settings": {
+    "title": "GLOBAL CONFIGURATION",
+    "subtitle": "Tweak voice recognition and presser engine behaviors",
+    "app_preferences": "App Preferences",
+    "language": "Language",
+    "trigger": "Trigger",
+    "hit_word": "Hit Word",
+    "hit_word_grammar": "Hit Word Grammar",
+    "key_presser": "Key Presser",
+    "wait_open_time": "Wait Open Time (ms)",
+    "key_release_interval": "Key Release Interval (ms)",
+    "diff_key_interval": "Diff Key Interval (ms)",
+    "recognizer": "Recognizer",
+    "chunk_time": "Chunk Time ({{val}}) (s)",
+    "vad_silence": "VAD Silence Duration ({{val}}) (ms)"
+  },
+  "log": {
+    "waiting": "Waiting for logs...",
+    "scroll_bottom": "↓ Scroll to bottom"
+  }
+}

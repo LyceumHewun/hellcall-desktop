@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { MacroCard } from "../components/MacroCard";
 import { useConfigStore } from "../../store/configStore";
+import { useTranslation } from "react-i18next";
 import {
   DndContext,
   closestCenter,
@@ -18,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 
 export function MacrosView() {
+  const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
 
   const sensors = useSensors(
@@ -80,18 +82,16 @@ export function MacrosView() {
               style={{ fontFamily: "var(--font-family-tech)" }}
               className="tracking-wider text-white mb-1"
             >
-              VOICE COMMAND ARSENAL
+              {t("macros.title")}
             </h1>
-            <p className="text-white/50 text-sm">
-              Configure tactical voice-activated macros
-            </p>
+            <p className="text-white/50 text-sm">{t("macros.subtitle")}</p>
           </div>
           <button
             onClick={addMacro}
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#FCE100] text-[#FCE100] rounded hover:bg-[#FCE100]/10 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New Macro</span>
+            <span>{t("macros.add_new")}</span>
           </button>
         </div>
       </div>

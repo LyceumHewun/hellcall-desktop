@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { attachLogger, LogLevel } from "@tauri-apps/plugin-log";
+import { useTranslation } from "react-i18next";
 
 interface LogEntry {
   id: number;
@@ -54,6 +55,7 @@ function formatTime(date: Date): string {
 }
 
 export function LogView() {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -113,7 +115,7 @@ export function LogView() {
         {logs.length === 0 && (
           <div className="flex items-center gap-2 text-zinc-600">
             <span className="inline-block w-2 h-4 bg-zinc-600 animate-pulse" />
-            <span>Waiting for logs...</span>
+            <span>{t("log.waiting")}</span>
           </div>
         )}
 
@@ -146,7 +148,7 @@ export function LogView() {
           }}
           className="fixed bottom-6 right-6 z-30 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono px-3 py-2 rounded border border-zinc-700 transition-colors shadow-lg"
         >
-          ↓ Scroll to bottom
+          {t("log.scroll_bottom")}
         </button>
       )}
     </div>

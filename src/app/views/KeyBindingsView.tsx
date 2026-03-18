@@ -3,8 +3,10 @@ import { Card, CardContent } from "../components/ui/card";
 import { KeyRecorder, RustInput } from "../components/KeyRecorder";
 import { KeySequence } from "../components/KeySequence";
 import { useConfigStore } from "../../store/configStore";
+import { useTranslation } from "react-i18next";
 
 export function KeyBindingsView() {
+  const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
 
   const [activeRecordingAction, setActiveRecordingAction] = useState<
@@ -30,11 +32,9 @@ export function KeyBindingsView() {
               style={{ fontFamily: "var(--font-family-tech)" }}
               className="tracking-wider text-white mb-1 uppercase"
             >
-              HARDWARE KEY BINDINGS
+              {t("bindings.title")}
             </h1>
-            <p className="text-white/50 text-sm">
-              Map logical commands to physical keyboard inputs
-            </p>
+            <p className="text-white/50 text-sm">{t("bindings.subtitle")}</p>
           </div>
         </div>
       </div>
@@ -52,10 +52,12 @@ export function KeyBindingsView() {
                       className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="min-w-12 text-white/50 font-mono text-sm">
-                          {action}
+                        <div className="min-w-10">
+                          <KeySequence sequence={[action]} compact />
+                        </div>
+                        <span className="text-white/50 font-mono text-sm">
+                          {t(`bindings.action.${action.toLowerCase()}`)}
                         </span>
-                        <KeySequence sequence={[action]} compact />
                       </div>
                       <KeyRecorder
                         actionName={action}

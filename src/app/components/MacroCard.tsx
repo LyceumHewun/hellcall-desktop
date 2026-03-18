@@ -14,6 +14,7 @@ import { CommandConfig } from "../../types/config";
 import { useConfigStore } from "../../store/configStore";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useTranslation } from "react-i18next";
 
 interface MacroCardProps {
   id: string;
@@ -28,6 +29,7 @@ export function MacroCard({
   command,
   onDelete,
 }: MacroCardProps) {
+  const { t } = useTranslation();
   const { updateConfig } = useConfigStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -189,7 +191,7 @@ export function MacroCard({
             })
           }
           className="w-[20%] min-w-[140px] bg-transparent border-b border-white/10 px-2 py-1 text-white placeholder:text-white/30 focus:outline-none focus:border-[#FCE100]/60 transition-colors text-sm"
-          placeholder="voice trigger"
+          placeholder={t("macros.card.trigger")}
         />
 
         {/* Macro Sequence */}
@@ -197,7 +199,7 @@ export function MacroCard({
           <KeySequence sequence={command.keys} compact />
           {isUnsaved && !isRecording && (
             <span className="text-[10px] text-red-400/80 uppercase tracking-wider ml-3">
-              Unsaved: Missing trigger or sequence
+              {t("macros.card.unsaved")}
             </span>
           )}
         </div>
@@ -220,8 +222,8 @@ export function MacroCard({
             }`}
             title={
               isRecording
-                ? "Stop Recording (Esc)"
-                : "Record Sequence (clears current)"
+                ? t("macros.card.stop_recording")
+                : t("macros.card.record_seq")
             }
           >
             <Keyboard className="w-4 h-4" />
@@ -230,7 +232,7 @@ export function MacroCard({
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="p-2 text-white/40 hover:text-[#FCE100] hover:bg-[#FCE100]/5 rounded transition-colors"
-            title="Advanced Settings"
+            title={t("macros.card.advanced")}
           >
             {isExpanded ? (
               <ChevronUp className="w-4 h-4" />
@@ -242,7 +244,7 @@ export function MacroCard({
           <button
             onClick={onDelete}
             className="p-2 text-white/40 hover:text-[#D93A3A] hover:bg-[#D93A3A]/5 rounded transition-colors"
-            title="Delete Macro"
+            title={t("macros.card.delete")}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -256,7 +258,7 @@ export function MacroCard({
             {/* Engine Grammar */}
             <div className="col-span-2 flex flex-col gap-1.5">
               <label className="text-white/50 text-xs uppercase tracking-wide">
-                Engine Grammar
+                {t("macros.card.grammar")}
               </label>
               <input
                 type="text"
@@ -273,7 +275,7 @@ export function MacroCard({
             {/* Fallback Shortcut */}
             <div className="col-span-1 flex flex-col gap-1.5">
               <label className="text-white/50 text-xs uppercase tracking-wide">
-                Fallback Shortcut
+                {t("macros.card.shortcut")}
               </label>
               <div className="flex items-center gap-2 h-[38px]">
                 <KeyRecorder
@@ -300,7 +302,7 @@ export function MacroCard({
             {/* Response Audio */}
             <div className="col-span-3 flex flex-col gap-1.5">
               <label className="text-white/50 text-xs uppercase tracking-wide">
-                Response Audio
+                {t("macros.card.audio")}
               </label>
               <div className="flex flex-wrap items-center gap-2 bg-white/5 border border-white/10 rounded px-3 py-2 min-h-[38px] focus-within:border-[#FCE100]/50 transition-colors">
                 {command.audio_files.map((audio, i) => (
@@ -327,7 +329,7 @@ export function MacroCard({
                   type="text"
                   onKeyDown={handleAddAudio}
                   className="flex-1 bg-transparent text-white text-sm placeholder:text-white/30 focus:outline-none min-w-[120px]"
-                  placeholder="Type filename and press Enter"
+                  placeholder={t("macros.card.audio_placeholder")}
                 />
               </div>
             </div>
