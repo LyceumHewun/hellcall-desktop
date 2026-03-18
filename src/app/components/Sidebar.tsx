@@ -18,9 +18,19 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
   const toggleEngine = async () => {
     if (status === "OFFLINE") {
+      const state = useConfigStore.getState();
+      if (!state.config) return;
+
+      // Validate that there is at least one valid macro before starting
+      const validMacrosCount = state.config.commands.filter(
+        (c) => c.command.trim() !== "" && c.keys.length > 0,
+      ).length;
+      if (validMacrosCount === 0) {
+        return;
+      }
+
       setStatus("STARTING");
       try {
-        const state = useConfigStore.getState();
         if (!state.config) throw new Error("Config not loaded");
 
         const sanitizedConfig = JSON.parse(
