@@ -27,43 +27,106 @@ export function mapWebEventToRustInput(
   const keyboardEvent = event as KeyboardEvent;
   const webCode = keyboardEvent.code;
   switch (webCode) {
-    case "ArrowUp":
-      return "UpArrow";
-    case "ArrowDown":
-      return "DownArrow";
-    case "ArrowLeft":
-      return "LeftArrow";
-    case "ArrowRight":
-      return "RightArrow";
-    case "ControlLeft":
-      return "ControlLeft";
-    case "ControlRight":
-      return "ControlRight";
-    case "ShiftLeft":
-      return "ShiftLeft";
-    case "ShiftRight":
-      return "ShiftRight";
     case "AltLeft":
       return "Alt";
     case "AltRight":
       return "AltGr";
+    case "Backspace":
+      return "Backspace";
+    case "CapsLock":
+      return "CapsLock";
+    case "ControlLeft":
+      return "ControlLeft";
+    case "ControlRight":
+      return "ControlRight";
+    case "Delete":
+      return "Delete";
+    case "ArrowDown":
+      return "DownArrow";
+    case "End":
+      return "End";
+    case "Escape":
+      return "Escape";
+    case "Home":
+      return "Home";
+    case "ArrowLeft":
+      return "LeftArrow";
     case "MetaLeft":
       return "MetaLeft";
     case "MetaRight":
       return "MetaRight";
-    case "Space":
-      return "Space";
+    case "PageDown":
+      return "PageDown";
+    case "PageUp":
+      return "PageUp";
     case "Enter":
       return "Return";
-    case "Escape":
-      return "Escape";
-    case "Backspace":
-      return "Backspace";
+    case "ArrowRight":
+      return "RightArrow";
+    case "ShiftLeft":
+      return "ShiftLeft";
+    case "ShiftRight":
+      return "ShiftRight";
+    case "Space":
+      return "Space";
     case "Tab":
       return "Tab";
+    case "ArrowUp":
+      return "UpArrow";
+    case "PrintScreen":
+      return "PrintScreen";
+    case "ScrollLock":
+      return "ScrollLock";
+    case "Pause":
+      return "Pause";
+    case "NumLock":
+      return "NumLock";
+    case "Backquote":
+      return "BackQuote";
+    case "Minus":
+      return "Minus";
+    case "Equal":
+      return "Equal";
+    case "BracketLeft":
+      return "LeftBracket";
+    case "BracketRight":
+      return "RightBracket";
+    case "Semicolon":
+      return "SemiColon";
+    case "Quote":
+      return "Quote";
+    case "Backslash":
+      return "BackSlash";
+    case "IntlBackslash":
+      return "IntlBackslash";
+    case "Comma":
+      return "Comma";
+    case "Period":
+      return "Dot";
+    case "Slash":
+      return "Slash";
+    case "Insert":
+      return "Insert";
+    case "NumpadEnter":
+      return "KpReturn";
+    case "NumpadSubtract":
+      return "KpMinus";
+    case "NumpadAdd":
+      return "KpPlus";
+    case "NumpadMultiply":
+      return "KpMultiply";
+    case "NumpadDivide":
+      return "KpDivide";
+    case "NumpadDecimal":
+      return "KpDelete";
+    case "Fn":
+      return "Function";
     default:
       if (webCode.startsWith("Digit")) {
         return webCode.replace("Digit", "Num");
+      }
+      if (webCode.startsWith("Numpad")) {
+        return webCode.replace("Numpad", "Kp");
       }
       return webCode;
   }
