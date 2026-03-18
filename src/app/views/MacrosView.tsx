@@ -39,7 +39,7 @@ export function MacrosView() {
         grammar: null,
         shortcut: null,
         keys: [],
-        audio_files: [],
+        audio_files: ["normal_reply.wav"],
       });
     });
   };

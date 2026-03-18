@@ -17,3 +17,4 @@
 # audio
 /audio/*
 !/audio/.gitkeep
+!/audio/normal_reply.wav
