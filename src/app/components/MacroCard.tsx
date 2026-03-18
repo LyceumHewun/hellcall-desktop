@@ -100,6 +100,11 @@ export function MacroCard({
           return;
         }
 
+        // 3. Length Limit Rule: Reject if sequence is 11 or longer
+        if (currentKeys.length >= 11) {
+          return;
+        }
+
         updateConfig((draft) => {
           draft.commands[commandIndex].keys.push(logicalKey as string);
         });
