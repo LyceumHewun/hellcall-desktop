@@ -38,6 +38,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["lib/**/*"]
+    "resources": {
+      "lib/": "",
+      "model/": "model/",
+      "audio/": "audio/"
+    },
+    "windows": {}
   }
 }

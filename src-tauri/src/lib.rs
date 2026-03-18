@@ -1,6 +1,7 @@
 use hellcall::{Config, HellcallEngine};
 use std::fs;
 use std::sync::Mutex;
+use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
 
 struct AppState {
@@ -8,22 +9,34 @@ struct AppState {
 }
 
 #[tauri::command]
-fn start_engine(state: State<'_, AppState>, config: Config) -> Result<String, String> {
+fn start_engine(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    config: Config,
+) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
     if engine_guard.is_some() {
         return Ok("Already started".into());
     }
 
-    let model_path = std::env::current_dir()
-        .map_err(|e| e.to_string())?
-        .join("model");
+    let model_path = app_handle
+        .path()
+        .resolve("model/", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve model path: {}", e))?
+        .to_string_lossy()
+        .replace("\\\\?\\", "") // on Windows can return paths with \\?\ prefix, which causes issues with some libraries
+        .to_string();
 
-    let model_path_str = model_path
-        .to_str()
-        .ok_or_else(|| "Invalid model path".to_string())?;
+    let audio_path = app_handle
+        .path()
+        .resolve("audio/", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve audio path: {}", e))?
+        .to_string_lossy()
+        .replace("\\\\?\\", "")
+        .to_string();
 
-    let engine =
-        HellcallEngine::start(config, model_path_str, None, None).map_err(|e| e.to_string())?;
+    let engine = HellcallEngine::start(config, &model_path, None, Some(audio_path))
+        .map_err(|e| e.to_string())?;
 
     *engine_guard = Some(engine);
     Ok("Started".into())
