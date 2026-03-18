@@ -34,16 +34,33 @@ export function MacrosView() {
   );
 
   const addMacro = () => {
-    updateConfig((draft) => {
-      draft.commands.push({
-        _frontendId: crypto.randomUUID(),
-        command: "",
-        grammar: null,
-        shortcut: null,
-        keys: [],
-        audio_files: ["normal_reply.wav"],
+    const existingDraft = config?.commands.find(
+      (cmd) => cmd.command.trim() === "" || cmd.keys.length === 0,
+    );
+    let targetId: string;
+
+    if (existingDraft) {
+      targetId = existingDraft._frontendId!;
+    } else {
+      targetId = crypto.randomUUID();
+      updateConfig((draft) => {
+        draft.commands.push({
+          _frontendId: targetId,
+          command: "",
+          grammar: null,
+          shortcut: null,
+          keys: [],
+          audio_files: ["normal_reply.wav"],
+        });
       });
-    });
+    }
+
+    setTimeout(() => {
+      document.getElementById(`macro-card-${targetId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 50);
   };
 
   const deleteMacro = (index: number) => {

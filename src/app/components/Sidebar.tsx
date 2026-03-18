@@ -61,11 +61,11 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
       <button
         onClick={toggleEngine}
         disabled={isStarting}
-        className={`relative overflow-hidden transition-all duration-300 ${
+        className={`relative overflow-hidden transition-all duration-300 cursor-pointer border-2 rounded p-4 group disabled:opacity-80 disabled:hover:scale-100 disabled:cursor-not-allowed ${
           isActive || isStarting
             ? "bg-[#FCE100] border-[#FCE100] shadow-[0_0_20px_rgba(252,225,0,0.3)]"
-            : "bg-transparent border-white/20"
-        } ${isStarting ? "animate-pulse" : ""} border-2 rounded p-4 group disabled:opacity-80`}
+            : "bg-transparent border-white/20 hover:border-[#FCE100]/50 hover:bg-white/5 active:scale-[0.98]"
+        } ${isStarting ? "animate-pulse" : ""}`}
       >
         <div
           className={`absolute inset-0 transition-opacity duration-1000 ${
@@ -79,8 +79,10 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         />
         <div className="relative flex flex-col items-center gap-2">
           <div
-            className={`w-3 h-3 rounded-full ${
-              isActive || isStarting ? "bg-black" : "bg-[#FCE100]"
+            className={`w-3 h-3 rounded-full transition-all duration-300 ${
+              isActive || isStarting
+                ? "bg-black"
+                : "bg-[#FCE100]/50 group-hover:bg-[#FCE100] group-hover:shadow-[0_0_10px_rgba(252,225,0,0.5)]"
             }`}
           />
           <span
@@ -97,7 +99,11 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
               isActive || isStarting ? "text-black" : "text-white/50"
             }`}
           >
-            {isStarting ? t("status.linking") : isActive ? t("status.active") : t("status.offline")}
+            {isStarting
+              ? t("status.linking")
+              : isActive
+                ? t("status.active")
+                : t("status.offline")}
           </span>
         </div>
       </button>

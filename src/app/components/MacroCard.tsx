@@ -55,6 +55,14 @@ export function MacroCard({
     if (!isRecording) return;
 
     const handleInput = (e: KeyboardEvent | MouseEvent) => {
+      // Ignore clicks on elements marked with data-ignore-record
+      if (
+        e.type === "mousedown" &&
+        (e.target as HTMLElement).closest('[data-ignore-record="true"]')
+      ) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -160,6 +168,7 @@ export function MacroCard({
 
   return (
     <div
+      id={`macro-card-${id}`}
       ref={setNodeRef}
       style={style}
       className={`bg-[#1E2128] rounded border ${
@@ -207,12 +216,8 @@ export function MacroCard({
         {/* Action Icons */}
         <div className="flex items-center gap-1">
           <button
+            data-ignore-record="true"
             onClick={() => {
-              if (!isRecording) {
-                updateConfig((draft) => {
-                  draft.commands[commandIndex].keys = [];
-                });
-              }
               setIsRecording(!isRecording);
             }}
             className={`p-2 rounded transition-colors ${
