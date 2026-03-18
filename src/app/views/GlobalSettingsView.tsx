@@ -35,94 +35,6 @@ export function GlobalSettingsView() {
         <div className="max-w-4xl mx-auto space-y-6 text-white">
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">Recognizer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Chunk Time ({config.recognizer.chunk_time})</Label>
-                <Slider
-                  value={[config.recognizer.chunk_time]}
-                  min={0.1}
-                  max={1.0}
-                  step={0.1}
-                  onValueChange={([val]) =>
-                    updateConfig((c) => {
-                      c.recognizer.chunk_time = val;
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  VAD Silence Duration ({config.recognizer.vad_silence_duration}
-                  )
-                </Label>
-                <Slider
-                  value={[config.recognizer.vad_silence_duration]}
-                  min={50}
-                  max={500}
-                  step={10}
-                  onValueChange={([val]) =>
-                    updateConfig((c) => {
-                      c.recognizer.vad_silence_duration = val;
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#1E2128] border-white/10 text-white">
-            <CardHeader>
-              <CardTitle className="text-[#FCE100]">Key Presser</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Wait Open Time</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.wait_open_time}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.wait_open_time = Number(e.target.value);
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Key Release Interval</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.key_release_interval}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.key_release_interval = Number(
-                        e.target.value,
-                      );
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Diff Key Interval</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.diff_key_interval}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.diff_key_interval = Number(e.target.value);
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#1E2128] border-white/10 text-white">
-            <CardHeader>
               <CardTitle className="text-[#FCE100]">Trigger</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -146,6 +58,94 @@ export function GlobalSettingsView() {
                   onChange={(e) =>
                     updateConfig((c) => {
                       c.trigger.hit_word_grammar = e.target.value;
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100]">Key Presser</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>Wait Open Time (ms)</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.wait_open_time}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.wait_open_time = Number(e.target.value);
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Key Release Interval (ms)</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.key_release_interval}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.key_release_interval = Number(
+                        e.target.value,
+                      );
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Diff Key Interval (ms)</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.diff_key_interval}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.diff_key_interval = Number(e.target.value);
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100]">Recognizer</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>Chunk Time ({config.recognizer.chunk_time}) (s)</Label>
+                <Slider
+                  value={[config.recognizer.chunk_time]}
+                  min={0.1}
+                  max={1.0}
+                  step={0.1}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.recognizer.chunk_time = val;
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  VAD Silence Duration ({config.recognizer.vad_silence_duration}
+                  ) (ms)
+                </Label>
+                <Slider
+                  value={[config.recognizer.vad_silence_duration]}
+                  min={50}
+                  max={500}
+                  step={10}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.recognizer.vad_silence_duration = val;
                     })
                   }
                 />
