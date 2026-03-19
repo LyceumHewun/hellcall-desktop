@@ -1,12 +1,18 @@
-use hellcall::{Config, HellcallEngine};
+use hellcall::{Config, EngineHandle, HellcallEngine};
 use std::fs;
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 
+enum AppEngine {
+    None,
+    Running(HellcallEngine),
+    Stopped(EngineHandle),
+}
+
 struct AppState {
-    engine: Mutex<Option<HellcallEngine>>,
+    engine: Mutex<AppEngine>,
 }
 
 #[tauri::command]
@@ -16,7 +22,8 @@ fn start_engine(
     config: Config,
 ) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
-    if engine_guard.is_some() {
+
+    if let AppEngine::Running(_) = *engine_guard {
         return Ok("Already started".into());
     }
 
@@ -36,19 +43,33 @@ fn start_engine(
         .replace("\\\\?\\", "")
         .to_string();
 
-    let engine = HellcallEngine::start(config, &model_path, None, Some(audio_path))
-        .map_err(|e| e.to_string())?;
+    let state_taken = std::mem::replace(&mut *engine_guard, AppEngine::None);
 
-    *engine_guard = Some(engine);
+    let engine = match state_taken {
+        AppEngine::Stopped(handle) => handle
+            .restart(config, &model_path, None, Some(audio_path))
+            .map_err(|e| e.to_string())?,
+        _ => HellcallEngine::start(config, &model_path, None, Some(audio_path))
+            .map_err(|e| e.to_string())?,
+    };
+
+    *engine_guard = AppEngine::Running(engine);
     Ok("Started".into())
 }
 
 #[tauri::command]
 fn stop_engine(state: State<'_, AppState>) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
-    if let Some(engine) = engine_guard.take() {
-        engine.stop();
+
+    let state_taken = std::mem::replace(&mut *engine_guard, AppEngine::None);
+
+    if let AppEngine::Running(engine) = state_taken {
+        let handle = engine.stop();
+        *engine_guard = AppEngine::Stopped(handle);
+    } else {
+        *engine_guard = state_taken;
     }
+
     Ok("Stopped".into())
 }
 
@@ -108,7 +129,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
-            engine: Mutex::new(None),
+            engine: Mutex::new(AppEngine::None),
         })
         .invoke_handler(tauri::generate_handler![
             load_config,
