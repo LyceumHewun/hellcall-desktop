@@ -1,6 +1,7 @@
 export interface RecognizerConfig {
   chunk_time: number;
   vad_silence_duration: number;
+  enable_denoise: boolean;
 }
 
 export interface KeyPresserConfig {

@@ -14,6 +14,7 @@ import {
 import { Slider } from "../components/ui/slider";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
+import { Switch } from "../components/ui/switch";
 import { useConfigStore } from "../../store/configStore";
 import { useTranslation } from "react-i18next";
 
@@ -165,9 +166,9 @@ export function GlobalSettingsView() {
                 </Label>
                 <Slider
                   value={[config.recognizer.chunk_time]}
-                  min={0.1}
+                  min={0.12}
                   max={1.0}
-                  step={0.1}
+                  step={0.02}
                   onValueChange={([val]) =>
                     updateConfig((c) => {
                       c.recognizer.chunk_time = val;
@@ -189,6 +190,25 @@ export function GlobalSettingsView() {
                   onValueChange={([val]) =>
                     updateConfig((c) => {
                       c.recognizer.vad_silence_duration = val;
+                    })
+                  }
+                />
+              </div>
+              <div className="flex flex-row items-center justify-between bg-black/30 rounded-lg border border-zinc-800 p-4 mt-4">
+                <div className="space-y-0.5">
+                  <Label>{t("settings.enable_denoise")}</Label>
+                  <p className="text-sm text-muted-foreground text-white/50">
+                    {t(
+                      "settings.enable_denoise_desc",
+                      "Filters out background noise (e.g., mechanical keyboards) to improve voice recognition accuracy.",
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  checked={config.recognizer.enable_denoise}
+                  onCheckedChange={(checked) =>
+                    updateConfig((c) => {
+                      c.recognizer.enable_denoise = checked;
                     })
                   }
                 />
