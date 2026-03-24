@@ -99,6 +99,12 @@ export function MacroCard({
       // Only push if a matching logical binding exists
       if (logicalKey) {
         const currentKeys = state.config.commands[commandIndex].keys;
+        const allowedKeys = ["UP", "DOWN", "LEFT", "RIGHT", "OPEN", "THROW"];
+
+        // Reject if the logical key is not in the allowed list
+        if (!allowedKeys.includes(logicalKey)) {
+          return;
+        }
 
         // 1. The THROW Lock Rule: If THROW is already in the array, reject all inputs
         if (currentKeys.includes("THROW")) {
@@ -112,11 +118,6 @@ export function MacroCard({
 
         // 3. Length Limit Rule: Reject if sequence is 11 or longer
         if (currentKeys.length >= 11) {
-          return;
-        }
-
-        // 4. The RESEND Rule: RESEND cannot be added at all
-        if (logicalKey === "RESEND") {
           return;
         }
 
