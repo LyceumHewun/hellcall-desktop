@@ -115,6 +115,11 @@ export function MacroCard({
           return;
         }
 
+        // 4. The RESEND Rule: RESEND cannot be added at all
+        if (logicalKey === "RESEND") {
+          return;
+        }
+
         updateConfig((draft) => {
           draft.commands[commandIndex].keys.push(logicalKey as string);
         });
