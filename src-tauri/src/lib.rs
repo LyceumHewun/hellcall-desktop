@@ -5,6 +5,8 @@ use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod utils;
+
 enum AppEngine {
     None,
     Running(HellcallEngine),
@@ -30,7 +32,7 @@ fn start_engine(
     let model_path = app_handle
         .path()
         .resolve("model/", BaseDirectory::Resource)
-        .map_err(|e| format!("Failed to resolve model path: {}", e))?
+        .map_err(|e| utils::format_and_log_error("Failed to resolve model path", e))?
         .to_string_lossy()
         .replace("\\\\?\\", "") // on Windows can return paths with \\?\ prefix, which causes issues with some libraries
         .to_string();
@@ -38,7 +40,7 @@ fn start_engine(
     let audio_path = app_handle
         .path()
         .resolve("audio/", BaseDirectory::Resource)
-        .map_err(|e| format!("Failed to resolve audio path: {}", e))?
+        .map_err(|e| utils::format_and_log_error("Failed to resolve audio path", e))?
         .to_string_lossy()
         .replace("\\\\?\\", "")
         .to_string();
@@ -48,9 +50,9 @@ fn start_engine(
     let engine = match state_taken {
         AppEngine::Stopped(handle) => handle
             .restart(config, &model_path, None, Some(audio_path))
-            .map_err(|e| e.to_string())?,
+            .map_err(|e| utils::format_and_log_error("Failed to restart engine", e))?,
         _ => HellcallEngine::start(config, &model_path, None, Some(audio_path))
-            .map_err(|e| e.to_string())?,
+            .map_err(|e| utils::format_and_log_error("Failed to start engine", e))?,
     };
 
     *engine_guard = AppEngine::Running(engine);
