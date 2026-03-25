@@ -13,8 +13,13 @@ enum AppEngine {
     Stopped(EngineHandle),
 }
 
+struct UnsafeStreamWrapper(cpal::Stream);
+unsafe impl Send for UnsafeStreamWrapper {}
+unsafe impl Sync for UnsafeStreamWrapper {}
+
 struct AppState {
     engine: Mutex<AppEngine>,
+    mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
 }
 
 #[tauri::command]
@@ -22,6 +27,7 @@ fn start_engine(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     config: Config,
+    device_name: Option<String>,
 ) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
 
@@ -49,9 +55,9 @@ fn start_engine(
 
     let engine = match state_taken {
         AppEngine::Stopped(handle) => handle
-            .restart(config, &model_path, None, Some(audio_path))
+            .restart(config, &model_path, device_name.clone(), Some(audio_path))
             .map_err(|e| utils::format_and_log_error("Failed to restart engine", e))?,
-        _ => HellcallEngine::start(config, &model_path, None, Some(audio_path))
+        _ => HellcallEngine::start(config, &model_path, device_name, Some(audio_path))
             .map_err(|e| utils::format_and_log_error("Failed to start engine", e))?,
     };
 
@@ -109,6 +115,109 @@ fn save_config(app: AppHandle, new_config: Config) -> Result<bool, String> {
     Ok(true)
 }
 
+#[tauri::command]
+fn get_audio_devices() -> Result<Vec<String>, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    let devices = host.input_devices().map_err(|e| e.to_string())?;
+    let mut names = Vec::new();
+    for device in devices {
+        if let Ok(name) = device.name() {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
+#[tauri::command]
+fn start_mic_test(
+    device_name: Option<String>,
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    use tauri::Emitter;
+
+    let host = cpal::default_host();
+    let device = if let Some(name) = device_name {
+        host.input_devices()
+            .map_err(|e| e.to_string())?
+            .find(|d| d.name().unwrap_or_default() == name)
+            .ok_or_else(|| "Device not found".to_string())?
+    } else {
+        host.default_input_device()
+            .ok_or_else(|| "No default device".to_string())?
+    };
+
+    let config = device.default_input_config().map_err(|e| e.to_string())?;
+
+    let sample_format = config.sample_format();
+    let config: cpal::StreamConfig = config.into();
+
+    let last_emit = std::sync::Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+
+    let err_fn = |err| log::error!("an error occurred on stream: {}", err);
+
+    let stream = match sample_format {
+        cpal::SampleFormat::F32 => {
+            let last_emit = last_emit.clone();
+            device.build_input_stream(
+                &config,
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let mut le = last_emit.lock().unwrap();
+                    if le.elapsed() >= std::time::Duration::from_millis(60) {
+                        let sum_squares: f32 = data.iter().map(|&s| s * s).sum();
+                        let rms = (sum_squares / data.len() as f32).sqrt();
+                        let _ = app_handle.emit("mic_volume", rms);
+                        *le = std::time::Instant::now();
+                    }
+                },
+                err_fn,
+                None,
+            )
+        }
+        cpal::SampleFormat::I16 => {
+            let last_emit = last_emit.clone();
+            device.build_input_stream(
+                &config,
+                move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                    let mut le = last_emit.lock().unwrap();
+                    if le.elapsed() >= std::time::Duration::from_millis(60) {
+                        let sum_squares: f32 = data
+                            .iter()
+                            .map(|&s| {
+                                let f = s as f32 / i16::MAX as f32;
+                                f * f
+                            })
+                            .sum();
+                        let rms = (sum_squares / data.len() as f32).sqrt();
+                        let _ = app_handle.emit("mic_volume", rms);
+                        *le = std::time::Instant::now();
+                    }
+                },
+                err_fn,
+                None,
+            )
+        }
+        _ => return Err("Unsupported sample format".to_string()),
+    }
+    .map_err(|e| e.to_string())?;
+
+    stream.play().map_err(|e| e.to_string())?;
+
+    let mut stream_guard = state.mic_test_stream.lock().map_err(|e| e.to_string())?;
+    *stream_guard = Some(UnsafeStreamWrapper(stream));
+
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_mic_test(state: State<'_, AppState>) -> Result<(), String> {
+    let mut stream_guard = state.mic_test_stream.lock().map_err(|e| e.to_string())?;
+    *stream_guard = None;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -132,8 +241,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             engine: Mutex::new(AppEngine::None),
+            mic_test_stream: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            get_audio_devices,
+            start_mic_test,
+            stop_mic_test,
             load_config,
             save_config,
             start_engine,

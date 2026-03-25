@@ -1,3 +1,7 @@
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Mic } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -11,16 +15,79 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { Button } from "../components/ui/button";
+import { Progress } from "../components/ui/progress";
 import { Slider } from "../components/ui/slider";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
 import { useConfigStore } from "../../store/configStore";
+import { useEngineStore } from "../../store/engineStore";
 import { useTranslation } from "react-i18next";
 
 export function GlobalSettingsView() {
   const { config, updateConfig } = useConfigStore();
   const { t, i18n } = useTranslation();
+  const { status, selectedDevice, setSelectedDevice } = useEngineStore();
+  const isEngineRunning = status === "STARTING" || status === "ACTIVE";
+
+  const [devices, setDevices] = useState<string[]>([]);
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [micVolume, setMicVolume] = useState(0);
+
+  const fetchDevices = async () => {
+    try {
+      const devs = await invoke<string[]>("get_audio_devices");
+      setDevices(devs);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDevices();
+  }, []);
+
+  useEffect(() => {
+    let unlisten: () => void;
+    if (isTestingMic) {
+      listen<number>("mic_volume", (event) => {
+        setMicVolume(Math.min(event.payload * 500, 100));
+      }).then((fn) => {
+        unlisten = fn;
+      });
+    } else {
+      setMicVolume(0);
+    }
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [isTestingMic]);
+
+  useEffect(() => {
+    return () => {
+      invoke("stop_mic_test").catch(console.error);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isEngineRunning && isTestingMic) {
+      invoke("stop_mic_test").catch(console.error);
+      setIsTestingMic(false);
+    }
+  }, [isEngineRunning, isTestingMic]);
+
+  const toggleMicTest = async () => {
+    if (isTestingMic) {
+      await invoke("stop_mic_test");
+      setIsTestingMic(false);
+    } else {
+      await invoke("start_mic_test", {
+        deviceName: selectedDevice,
+      });
+      setIsTestingMic(true);
+    }
+  };
 
   if (!config) return null;
 
@@ -54,7 +121,7 @@ export function GlobalSettingsView() {
                   value={i18n.language.startsWith("zh") ? "zh" : "en"}
                   onValueChange={(val) => i18n.changeLanguage(val)}
                 >
-                  <SelectTrigger className="w-[180px] bg-black/30 border-white/10 text-white">
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
                     <SelectValue placeholder="Language" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1E2128] border-white/10 text-white">
@@ -62,6 +129,67 @@ export function GlobalSettingsView() {
                     <SelectItem value="zh">简体中文</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>{t("settings.input_device")}</Label>
+                </div>
+                <Select
+                  value={selectedDevice || "system_default"}
+                  onValueChange={(val) =>
+                    setSelectedDevice(val === "system_default" ? null : val)
+                  }
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue placeholder="System Default" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="system_default">
+                      {t("settings.system_default")}
+                    </SelectItem>
+                    {devices.map((device) => (
+                      <SelectItem key={device} value={device}>
+                        {device}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>{t("settings.mic_test")}</Label>
+                  {isEngineRunning && (
+                    <span className="-mt-0.5 text-xs text-yellow-500/80">
+                      {t("settings.mic_test_disabled")}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 space-y-1.5 mt-1">
+                    <Progress value={micVolume} className="h-2 bg-zinc-800" />
+                    <div className="flex justify-between text-[10px] text-white/40 font-mono leading-none">
+                      <span>0%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant={isTestingMic ? "destructive" : "secondary"}
+                    className={
+                      isTestingMic
+                        ? "w-32 cursor-pointer"
+                        : "w-32 cursor-pointer text-white/70 border hover:border-primary/80 hover:bg-primary/10"
+                    }
+                    onClick={toggleMicTest}
+                    disabled={isEngineRunning}
+                  >
+                    <Mic className="w-4 h-4 mr-2" />
+                    {isTestingMic
+                      ? t("settings.stop_test")
+                      : t("settings.start_test")}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -205,6 +333,7 @@ export function GlobalSettingsView() {
                   </p>
                 </div>
                 <Switch
+                  className="border border-primary cursor-pointer"
                   checked={config.recognizer.enable_denoise}
                   onCheckedChange={(checked) =>
                     updateConfig((c) => {

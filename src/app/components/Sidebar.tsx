@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { Settings, Keyboard, Command, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
+import { useEngineStore } from "../../store/engineStore";
 import { AppConfig } from "../../types/config";
 import { useTranslation } from "react-i18next";
 
@@ -10,11 +10,9 @@ interface SidebarProps {
   setActiveNav: (nav: string) => void;
 }
 
-type EngineStatus = "OFFLINE" | "STARTING" | "ACTIVE";
-
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<EngineStatus>("OFFLINE");
+  const { status, setStatus, selectedDevice } = useEngineStore();
 
   const toggleEngine = async () => {
     if (status === "OFFLINE") {
@@ -46,7 +44,10 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
             return cmd;
           });
 
-        await invoke("start_engine", { config: sanitizedConfig });
+        await invoke("start_engine", {
+          config: sanitizedConfig,
+          deviceName: selectedDevice,
+        });
         setStatus("ACTIVE");
       } catch (error) {
         console.error("Failed to start engine:", error);
