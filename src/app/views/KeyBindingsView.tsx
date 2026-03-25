@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { Card, CardContent } from "../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import { KeyRecorder, RustInput } from "../components/KeyRecorder";
 import { KeySequence } from "../components/KeySequence";
 import { useConfigStore } from "../../store/configStore";
@@ -40,10 +45,62 @@ export function KeyBindingsView() {
       </div>
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-6">
-          <Card className="bg-[#1E2128] border-white/10">
-            <CardContent className="p-0 divide-y divide-white/10 [&:last-child]:pb-0">
-              {["UP", "DOWN", "LEFT", "RIGHT", "OPEN", "THROW", "RESEND"].map(
-                (action) => {
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("bindings.stratagem_controls")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-black/30 rounded-lg border border-zinc-800 divide-y divide-zinc-800 overflow-hidden">
+                {["UP", "DOWN", "LEFT", "RIGHT", "OPEN", "THROW"].map(
+                  (action) => {
+                    const keyName = bindings[action];
+                    if (!keyName) return null;
+                    return (
+                      <div
+                        key={action}
+                        className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-10">
+                            <KeySequence sequence={[action]} compact />
+                          </div>
+                          <span className="text-white/50 font-mono text-sm">
+                            {t(`bindings.action.${action.toLowerCase()}`)}
+                          </span>
+                        </div>
+                        <KeyRecorder
+                          actionName={action}
+                          currentKeyCode={keyName as RustInput}
+                          isRecording={activeRecordingAction === action}
+                          onStartRecording={() =>
+                            setActiveRecordingAction(action)
+                          }
+                          onKeyRecorded={(newKeyCode) =>
+                            handleKeyRecorded(action, newKeyCode)
+                          }
+                          onCancelRecording={() =>
+                            setActiveRecordingAction(null)
+                          }
+                        />
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("bindings.utility_functions")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-black/30 rounded-lg border border-zinc-800 divide-y divide-zinc-800 overflow-hidden">
+                {["RESEND"].map((action) => {
                   const keyName = bindings[action];
                   if (!keyName) return null;
                   return (
@@ -52,10 +109,7 @@ export function KeyBindingsView() {
                       className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="min-w-10">
-                          <KeySequence sequence={[action]} compact />
-                        </div>
-                        <span className="text-white/50 font-mono text-sm">
+                        <span className="ml-2 text-white/50 font-mono text-sm">
                           {t(`bindings.action.${action.toLowerCase()}`)}
                         </span>
                       </div>
@@ -73,8 +127,8 @@ export function KeyBindingsView() {
                       />
                     </div>
                   );
-                },
-              )}
+                })}
+              </div>
             </CardContent>
           </Card>
         </div>

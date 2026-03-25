@@ -1,7 +1,7 @@
 {
   "nav": {
     "macros": "宏命令",
-    "keybindings": "按键映射",
+    "keybindings": "按键绑定",
     "settings": "全局设置",
     "log": "终端日志"
   },
@@ -31,6 +31,8 @@
   "bindings": {
     "title": "硬件按键绑定",
     "subtitle": "将逻辑指令映射到物理按键",
+    "stratagem_controls": "战备操作",
+    "utility_functions": "辅助功能",
     "action": {
       "up": "上",
       "down": "下",

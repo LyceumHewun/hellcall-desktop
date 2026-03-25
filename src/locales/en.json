@@ -31,6 +31,8 @@
   "bindings": {
     "title": "HARDWARE KEY BINDINGS",
     "subtitle": "Map logical commands to physical keyboard inputs",
+    "stratagem_controls": "Stratagem Controls",
+    "utility_functions": "Utility Functions",
     "action": {
       "up": "Up",
       "down": "Down",
