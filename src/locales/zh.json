@@ -40,7 +40,8 @@
       "right": "右",
       "open": "打开战备菜单",
       "throw": "投掷信标",
-      "resend": "重新发送指令"
+      "resend": "重新发送指令",
+      "ptt": "按键说话"
     }
   },
   "settings": {
@@ -62,6 +63,9 @@
     "start_test": "开始测试",
     "mic_test_disabled": "Voice Link 引擎运行时禁用麦克风测试",
     "recognizer": "Recognizer",
+    "talk_mode": "语音识别模式",
+    "talk_mode_vad": "语音唤醒",
+    "talk_mode_ptt": "按键说话",
     "chunk_time": "音频流识别块时长 ({{val}}) (秒)",
     "vad_silence": "VAD 静音检测时长 ({{val}}) (毫秒)",
     "enable_denoise": "启用音频降噪",

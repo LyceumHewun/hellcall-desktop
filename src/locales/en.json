@@ -40,7 +40,8 @@
       "right": "Right",
       "open": "Open",
       "throw": "Throw",
-      "resend": "Resend"
+      "resend": "Resend",
+      "ptt": "Push-to-Talk"
     }
   },
   "settings": {
@@ -62,6 +63,9 @@
     "start_test": "Start Test",
     "mic_test_disabled": "Microphone testing is disabled while Voice Link is active",
     "recognizer": "Recognizer",
+    "talk_mode": "Voice Recognition Mode",
+    "talk_mode_vad": "Voice Activation",
+    "talk_mode_ptt": "Push-to-Talk",
     "chunk_time": "Chunk Time ({{val}}) (s)",
     "vad_silence": "VAD Silence Duration ({{val}}) (ms)",
     "enable_denoise": "Enable Audio Denoise",

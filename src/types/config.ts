@@ -1,7 +1,10 @@
+export type TalkMode = "push_to_talk" | "voice_activation";
+
 export interface RecognizerConfig {
   chunk_time: number;
   vad_silence_duration: number;
   enable_denoise: boolean;
+  talk_mode: TalkMode;
 }
 
 export interface KeyPresserConfig {
