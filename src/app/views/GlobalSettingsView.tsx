@@ -313,7 +313,7 @@ export function GlobalSettingsView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label>
                   {t("settings.chunk_time", {
                     val: config.recognizer.chunk_time,
@@ -331,7 +331,8 @@ export function GlobalSettingsView() {
                   }
                 />
               </div>
-              <div className="space-y-2">
+
+              <div className="space-y-3">
                 <Label>
                   {t("settings.vad_silence", {
                     val: config.recognizer.vad_silence_duration,
@@ -349,25 +350,23 @@ export function GlobalSettingsView() {
                   }
                 />
               </div>
-              <div className="flex flex-row items-center justify-between bg-black/30 rounded-lg border border-zinc-800 p-4 mt-4">
-                <div className="space-y-0.5">
-                  <Label>{t("settings.enable_denoise")}</Label>
-                  <p className="text-sm text-muted-foreground text-white/50">
-                    {t(
-                      "settings.enable_denoise_desc",
-                      "Filters out background noise (e.g., mechanical keyboards) to improve voice recognition accuracy.",
-                    )}
+
+              <div className="space-y-3">
+                <Label>{t("settings.enable_denoise")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.enable_denoise_desc")}
                   </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.recognizer.enable_denoise}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.recognizer.enable_denoise = checked;
+                      })
+                    }
+                  />
                 </div>
-                <Switch
-                  className="border border-primary cursor-pointer"
-                  checked={config.recognizer.enable_denoise}
-                  onCheckedChange={(checked) =>
-                    updateConfig((c) => {
-                      c.recognizer.enable_denoise = checked;
-                    })
-                  }
-                />
               </div>
             </CardContent>
           </Card>

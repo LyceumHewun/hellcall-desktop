@@ -68,7 +68,7 @@
     "talk_mode_ptt": "按键说话",
     "chunk_time": "音频流识别块时长 ({{val}}) (秒)",
     "vad_silence": "VAD 静音检测时长 ({{val}}) (毫秒)",
-    "enable_denoise": "启用音频降噪",
+    "enable_denoise": "音频降噪",
     "enable_denoise_desc": "过滤背景噪音（如机械键盘声）以提高语音识别准确率。"
   },
   "log": {
