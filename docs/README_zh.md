@@ -1,6 +1,6 @@
 # Hellcall Desktop
 
-Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面应用程序。它为 [hellcall](https://github.com/LyceumHewun/hellcall) 引擎提供了一个图形化界面，提供了一种无缝配置和管理语音激活键盘宏的方式——旨在增强游戏体验（例如在《绝地潜兵 2》(Helldivers 2) 中呼叫战略配备）。
+Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面应用程序。它提供了一种无缝配置和管理语音激活键盘宏的方式——旨在增强游戏体验（例如在《绝地潜兵 2》(Helldivers 2) 中呼叫战略配备）。
 
 [English](../README.md) | 中文
 
@@ -19,7 +19,7 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 
 - **前端：** React 19, Vite, TypeScript, Tailwind CSS 4, Zustand (状态管理), @dnd-kit (拖拽), Radix UI。
 - **后端/桌面框架：** Tauri 2.0, Rust。
-- **语音引擎：** 与 [hellcall](https://github.com/LyceumHewun/hellcall) Rust 库无缝集成。
+- **语音引擎：** 集成 [Vosk](https://alphacephei.com/vosk/) 语音识别引擎。
 
 ## 先决条件
 
@@ -38,12 +38,6 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
    从 [Vosk Models 页面](https://alphacephei.com/vosk/models) 下载 Vosk 语言模型。
    - **注意**：您必须下载 **"small" (小型)** 模型（例如，英语使用 `vosk-model-small-en-us-0.15`，中文使用 `vosk-model-small-cn-0.22`）。大型模型没有针对这种实时宏触发用例进行优化。
    - 将下载的模型 zip 文件的内容（内部文件，如 `am`, `conf`, `graph`, `ivector`）直接解压到 `src-tauri/model/` 目录中。
-
-### `hellcall` 依赖项开发说明
-
-由于上游依赖行为影响了 `hellcall`，您可能会在编译时遇到关于下载的 cargo 缓存中缺少 Vosk 库的错误。为了解决此问题并成功编译：
-1. 导航到本地的 cargo git checkouts 文件夹（通常位于 `~/.cargo/git/checkouts/hellcall-<hash>/<hash>/`）。
-2. 就像您为 `src-tauri/lib` 所做的一样，您必须将同一个下载的 `libvosk` 动态库文件放入该检出的 `hellcall` 仓库内的 `lib` 文件夹中。
 
 ## 快速开始
 

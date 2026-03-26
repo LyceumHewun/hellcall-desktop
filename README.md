@@ -2,7 +2,7 @@
 
 English | [中文](docs/README_zh.md)
 
-Hellcall Desktop is a cross-platform desktop application built with Tauri, React, and Rust. It serves as a graphical interface for the [hellcall](https://github.com/LyceumHewun/hellcall) engine, providing a seamless way to configure and manage voice-activated keyboard macros—designed to enhance gameplay experiences (such as calling stratagems in Helldivers 2).
+Hellcall Desktop is a cross-platform desktop application built with Tauri, React, and Rust. It provides a seamless way to configure and manage voice-activated keyboard macros—designed to enhance gameplay experiences (such as calling stratagems in Helldivers 2).
 
 ![Hellcall Desktop Preview](./preview.png)
 
@@ -19,7 +19,7 @@ Hellcall Desktop is a cross-platform desktop application built with Tauri, React
 
 - **Frontend:** React 19, Vite, TypeScript, Tailwind CSS 4, Zustand (State Management), @dnd-kit (Drag and Drop), Radix UI.
 - **Backend/Desktop Framework:** Tauri 2.0, Rust.
-- **Voice Engine:** Seamless integration with the [hellcall](https://github.com/LyceumHewun/hellcall) Rust library.
+- **Voice Engine:** Integrated [Vosk](https://alphacephei.com/vosk/) speech recognition engine.
 
 ## Prerequisites
 
@@ -38,12 +38,6 @@ This project relies on the Vosk speech recognition engine. Before running or bui
    Download a Vosk language model from the [Vosk Models page](https://alphacephei.com/vosk/models).
    - **Important**: You must download a **"small"** model (e.g., `vosk-model-small-en-us-0.15` for English or `vosk-model-small-cn-0.22` for Chinese). Large models are not optimized for this real-time macro use case.
    - Extract the contents of the downloaded model zip file (the internal files like `am`, `conf`, `graph`, `ivector`) directly into the `src-tauri/model/` directory.
-
-### Development Notes for `hellcall` Dependency
-
-Due to an upstream dependency behavior affecting `hellcall`, you may encounter compilation errors related to missing Vosk libraries in the downloaded cargo cache. To resolve this and compile successfully:
-1. Navigate to your local cargo git checkouts folder (usually located around `~/.cargo/git/checkouts/hellcall-<hash>/<hash>/`).
-2. Just like you did for `src-tauri/lib`, you must place the same downloaded `libvosk` dynamic library file into the `lib` folder inside this checked-out `hellcall` repository.
 
 ## Getting Started
 

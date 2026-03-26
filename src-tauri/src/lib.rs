@@ -1,3 +1,4 @@
+mod hellcall;
 use hellcall::{Config, EngineHandle, HellcallEngine};
 use std::fs;
 use std::sync::Mutex;
