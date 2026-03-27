@@ -30,9 +30,10 @@ impl Default for VisionConfig {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct Config {
     #[serde(default)]
-    pub vision: Option<VisionConfig>,
+    pub vision: VisionConfig,
     pub recognizer: RecognizerConfig,
     pub key_presser: KeyPresserConfig,
     /// 按键映射
@@ -54,6 +55,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct RecognizerConfig {
     /// 音频识别的时间段 (秒)
     pub chunk_time: f32,
@@ -77,12 +79,14 @@ pub enum TalkMode {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct TriggerConfig {
     pub hit_word: Option<String>,
     pub hit_word_grammar: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct CommandConfig {
     pub command: String,
     pub grammar: Option<String>,
@@ -94,7 +98,7 @@ pub struct CommandConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            vision: Some(VisionConfig::default()),
+            vision: VisionConfig::default(),
             recognizer: RecognizerConfig::default(),
             key_presser: KeyPresserConfig::default(),
             key_map: HashMap::from([
@@ -128,6 +132,18 @@ impl Default for TriggerConfig {
         Self {
             hit_word: None,
             hit_word_grammar: None,
+        }
+    }
+}
+
+impl Default for CommandConfig {
+    fn default() -> Self {
+        Self {
+            command: String::new(),
+            grammar: None,
+            shortcut: None,
+            keys: Vec::new(),
+            audio_files: Vec::new(),
         }
     }
 }

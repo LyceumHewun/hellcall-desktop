@@ -37,6 +37,7 @@ pub enum LocalKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct KeyPresserConfig {
     /// 等待打开战备页面的时间
     pub wait_open_time: u64,

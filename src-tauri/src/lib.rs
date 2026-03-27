@@ -98,8 +98,26 @@ fn load_config(app: AppHandle) -> Result<Config, String> {
     }
 
     let toml_string = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    let config: Config = toml::from_str(&toml_string).map_err(|e| e.to_string())?;
-    Ok(config)
+    match toml::from_str::<Config>(&toml_string) {
+        Ok(config) => {
+            // Silent upgrade: rewrite config to disk immediately to save new defaults
+            if let Ok(new_toml) = toml::to_string(&config) {
+                let _ = fs::write(&config_path, new_toml);
+            }
+            Ok(config)
+        }
+        Err(e) => {
+            log::error!("Config corrupted: {}", e);
+            let bak_path = config_dir.join("config.toml.bak");
+            let _ = fs::rename(&config_path, &bak_path);
+
+            let default_config = Config::default();
+            if let Ok(new_toml) = toml::to_string(&default_config) {
+                let _ = fs::write(&config_path, new_toml);
+            }
+            Ok(default_config)
+        }
+    }
 }
 
 #[tauri::command]

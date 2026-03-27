@@ -214,7 +214,8 @@ impl HellcallEngine {
             }
         }
 
-        let yolo_engine = if config.vision.as_ref().map_or(false, |v| v.enable_occ) {
+        let vision_config = &config.vision;
+        let yolo_engine = if vision_config.enable_occ {
             let onnx_path = std::fs::read_dir(model_path).ok().and_then(|mut rd| {
                 rd.find_map(|res| {
                     let path = res.ok()?.path();
@@ -247,7 +248,7 @@ impl HellcallEngine {
                 (&loaded_engine, config.key_map.get(&LocalKey::OCC).cloned())
             {
                 let engine_ref = engine_arc.clone();
-                let capture_ratio = config.vision.as_ref().unwrap().capture_ratio;
+                let capture_ratio = vision_config.capture_ratio;
 
                 key_presser.listen_key(occ_input, move |pressed, push_fn| {
                     if !pressed {
