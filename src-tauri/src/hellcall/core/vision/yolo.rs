@@ -22,11 +22,24 @@ impl YoloEngine {
         let mut builder = Session::builder()
             .context("Failed to create ort session builder")?
             .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(|e| anyhow::anyhow!("Failed to set optimization level: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to set optimization level: {}", e))?
+            .with_execution_providers([ort::ep::CUDA::default().build()])
+            .map_err(|e| anyhow::anyhow!("Failed to configure execution providers: {}", e))?;
 
-        let session = builder
+        let mut session = builder
             .commit_from_file(model_path)
             .context("Failed to load ONNX model")?;
+
+        let dummy_tensor = ndarray::Array4::<f32>::zeros((1, 3, 640, 640));
+        let input =
+            Tensor::from_array(dummy_tensor).context("Failed to create Tensor for warmup")?;
+        let _ = session
+            .run(ort::inputs![input])
+            .context("Warm-up inference failed")?;
+        log::info!("CUDA/YOLO Engine warmed up and locked into VRAM.");
+
+        log::info!("YOLO Engine created, attempted to use CUDA execution provider.");
+
         Ok(Self {
             session: Mutex::new(session),
         })
@@ -69,7 +82,11 @@ impl YoloEngine {
                         }
                     }
                 } else {
-                    anyhow::bail!("YOLO output '{}' shape unsupported for parsing: {:?}", name, shape);
+                    anyhow::bail!(
+                        "YOLO output '{}' shape unsupported for parsing: {:?}",
+                        name,
+                        shape
+                    );
                 }
             } else {
                 anyhow::bail!("Failed to extract f32 tensor from YOLO output '{}'", name);
