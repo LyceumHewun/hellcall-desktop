@@ -2,7 +2,7 @@ pub mod config;
 pub mod core;
 pub mod utils;
 
-pub use config::Config;
+pub use config::{load_config_from_path, save_config_to_path, Config};
 
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait};

@@ -1,6 +1,5 @@
 mod hellcall;
-use hellcall::{Config, EngineHandle, HellcallEngine};
-use std::fs;
+use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
@@ -84,53 +83,22 @@ fn stop_engine(state: State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn load_config(app: AppHandle) -> Result<Config, String> {
-    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    let config_path = config_dir.join("config.toml");
-
-    if !config_path.exists() {
-        if !config_dir.exists() {
-            fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-        }
-        let default_config = Config::default();
-        let toml_string = toml::to_string(&default_config).map_err(|e| e.to_string())?;
-        fs::write(&config_path, toml_string).map_err(|e| e.to_string())?;
-        return Ok(default_config);
-    }
-
-    let toml_string = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    match toml::from_str::<Config>(&toml_string) {
-        Ok(config) => {
-            // Silent upgrade: rewrite config to disk immediately to save new defaults
-            if let Ok(new_toml) = toml::to_string(&config) {
-                let _ = fs::write(&config_path, new_toml);
-            }
-            Ok(config)
-        }
-        Err(e) => {
-            log::error!("Config corrupted: {}", e);
-            let bak_path = config_dir.join("config.toml.bak");
-            let _ = fs::rename(&config_path, &bak_path);
-
-            let default_config = Config::default();
-            if let Ok(new_toml) = toml::to_string(&default_config) {
-                let _ = fs::write(&config_path, new_toml);
-            }
-            Ok(default_config)
-        }
-    }
+    let config_path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("config.toml");
+    load_config_from_path(&config_path)
 }
 
 #[tauri::command]
 fn save_config(app: AppHandle, new_config: Config) -> Result<bool, String> {
-    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    let config_path = config_dir.join("config.toml");
-
-    if !config_dir.exists() {
-        fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-    }
-
-    let toml_string = toml::to_string(&new_config).map_err(|e| e.to_string())?;
-    fs::write(&config_path, toml_string).map_err(|e| e.to_string())?;
+    let config_path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("config.toml");
+    save_config_to_path(&config_path, &new_config)?;
     Ok(true)
 }
 
