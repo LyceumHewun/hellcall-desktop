@@ -110,7 +110,7 @@ export function GlobalSettingsView() {
         <div className="max-w-4xl mx-auto space-y-6 text-white">
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.app_preferences")}
               </CardTitle>
             </CardHeader>
@@ -196,7 +196,7 @@ export function GlobalSettingsView() {
 
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.trigger")}
               </CardTitle>
             </CardHeader>
@@ -257,7 +257,7 @@ export function GlobalSettingsView() {
 
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.key_presser")}
               </CardTitle>
             </CardHeader>
@@ -308,7 +308,7 @@ export function GlobalSettingsView() {
 
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.recognizer")}
               </CardTitle>
             </CardHeader>
@@ -373,7 +373,7 @@ export function GlobalSettingsView() {
 
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
-              <CardTitle className="text-[#FCE100]">
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.vision")}
               </CardTitle>
             </CardHeader>
