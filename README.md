@@ -12,6 +12,7 @@ Hellcall Desktop is a cross-platform desktop application built with Tauri, React
 - **Configurable Recognizer:** Adjust VAD (Voice Activity Detection) silence duration and chunk times for optimal responsiveness.
 - **Advanced Key Presser:** Fine-tune key release intervals, inter-key intervals, and initial wait times.
 - **Customizable Triggers & Macros:** Define specific hit-words, grammars, and shortcuts to trigger sequences. You can also assign custom audio feedback (e.g., `normal_reply.wav`).
+- **Vision-Based OCC:** Utilize an experimental "One-Click Completion" (OCC) vision module to automatically recognize game states via YOLO computer vision and trigger stratagems instantly.
 - **Modern UI:** Built with React 19, Tailwind CSS 4, and Radix UI primitives. It features a sleek, game-inspired dark theme and a drag-and-drop interface for sorting your macros.
 - **Localization:** Multi-language support (English and Chinese) powered by `react-i18next`.
 
@@ -20,6 +21,7 @@ Hellcall Desktop is a cross-platform desktop application built with Tauri, React
 - **Frontend:** React 19, Vite, TypeScript, Tailwind CSS 4, Zustand (State Management), @dnd-kit (Drag and Drop), Radix UI.
 - **Backend/Desktop Framework:** Tauri 2.0, Rust.
 - **Voice Engine:** Integrated [Vosk](https://alphacephei.com/vosk/) speech recognition engine.
+- **Computer Vision:** High-performance YOLO inference powered by [ONNX Runtime (ort)](https://github.com/ort-rs/ort) with CUDA hardware acceleration support.
 
 ## Prerequisites
 
