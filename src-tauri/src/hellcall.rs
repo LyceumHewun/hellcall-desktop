@@ -4,14 +4,14 @@ pub mod utils;
 
 pub use config::Config;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
 use log::{info, warn};
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use std::thread;
 
@@ -215,45 +215,40 @@ impl HellcallEngine {
         }
 
         // Vision capture + YOLO inference (optional binding)
-        let yolo_engine: Option<Arc<YoloEngine>> =
-            if config.key_map.contains_key(&LocalKey::VISION) {
-                // model_path points to the bundled model/ directory;
-                // find the first .onnx file in it.
-                let onnx_path = std::fs::read_dir(model_path)
-                    .ok()
-                    .and_then(|mut rd| {
-                        rd.find(|e| {
-                            e.as_ref()
-                                .map(|e| {
-                                    e.path()
-                                        .extension()
-                                        .and_then(|x| x.to_str())
-                                        == Some("onnx")
-                                })
-                                .unwrap_or(false)
-                        })
+        let yolo_engine: Option<Arc<YoloEngine>> = if config.key_map.contains_key(&LocalKey::VISION)
+        {
+            // model_path points to the bundled model/ directory;
+            // find the first .onnx file in it.
+            let onnx_path = std::fs::read_dir(model_path)
+                .ok()
+                .and_then(|mut rd| {
+                    rd.find(|e| {
+                        e.as_ref()
+                            .map(|e| e.path().extension().and_then(|x| x.to_str()) == Some("onnx"))
+                            .unwrap_or(false)
                     })
-                    .and_then(|e| e.ok())
-                    .map(|e| e.path());
+                })
+                .and_then(|e| e.ok())
+                .map(|e| e.path());
 
-                if let Some(path) = onnx_path {
-                    match YoloEngine::new(path.to_str().unwrap_or("")) {
-                        Ok(engine) => {
-                            log::info!("YoloEngine loaded: {:?}", path);
-                            Some(Arc::new(engine))
-                        }
-                        Err(e) => {
-                            log::warn!("YoloEngine failed to load: {}", e);
-                            None
-                        }
+            if let Some(path) = onnx_path {
+                match YoloEngine::new(path.to_str().unwrap_or("")) {
+                    Ok(engine) => {
+                        log::info!("YoloEngine loaded: {:?}", path);
+                        Some(Arc::new(engine))
                     }
-                } else {
-                    log::warn!("No .onnx file found in model_path: {}", model_path);
-                    None
+                    Err(e) => {
+                        log::warn!("YoloEngine failed to load: {}", e);
+                        None
+                    }
                 }
             } else {
+                log::warn!("No .onnx file found in model_path: {}", model_path);
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         if let Some(vision_input) = config.key_map.get(&LocalKey::VISION).cloned() {
             let engine_ref = yolo_engine.clone();
@@ -262,17 +257,19 @@ impl HellcallEngine {
                     log::info!("Vision capture triggered");
                     let engine = engine_ref.clone();
                     std::thread::spawn(move || {
-                        match crate::hellcall::core::vision::capture_frame() {
-                            Ok(img) => {
-                                if let Some(eng) = engine {
-                                    if let Err(e) = eng.infer(img) {
-                                        log::error!("YOLO inference failed: {}", e);
+                        if let Some(eng) = engine {
+                            match crate::hellcall::core::vision::recognize_console_arrows(&eng) {
+                                Ok(sequence) => {
+                                    if !sequence.is_empty() {
+                                        log::debug!("Vision sequence recognized: {:?}", sequence);
+                                    } else {
+                                        log::warn!("No valid sequence found");
                                     }
-                                } else {
-                                    log::warn!("Vision key pressed but YoloEngine not loaded");
                                 }
+                                Err(e) => log::error!("Vision pipeline failed: {}", e),
                             }
-                            Err(e) => log::error!("Vision capture failed: {}", e),
+                        } else {
+                            log::warn!("Vision key pressed but YoloEngine not loaded");
                         }
                     });
                 }
