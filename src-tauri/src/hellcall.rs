@@ -1,6 +1,5 @@
 pub mod config;
 pub mod core;
-pub mod utils;
 
 pub use config::{load_config_from_path, save_config_to_path, Config};
 
@@ -22,7 +21,7 @@ use self::core::keypress::*;
 use self::core::matcher::*;
 use self::core::speaker::*;
 use self::core::vision::YoloEngine;
-use self::utils::*;
+use crate::utils::*;
 
 static AUDIO_DIR: &str = "audio";
 
