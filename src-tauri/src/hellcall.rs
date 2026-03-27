@@ -204,7 +204,7 @@ impl HellcallEngine {
                 // listen push-to-talk key
                 if let Some(ptt_input) = config.key_map.get(&LocalKey::PTT).cloned() {
                     let speech_ctrl = processor.get_speech_controller();
-                    key_presser.listen_key(ptt_input, move |speaking| {
+                    key_presser.listen_key(ptt_input, move |speaking, _push_fn| {
                         speech_ctrl.set_is_speaking(speaking);
                     });
                 }
@@ -214,25 +214,17 @@ impl HellcallEngine {
             }
         }
 
-        // Vision capture + YOLO inference (optional binding)
-        let yolo_engine: Option<Arc<YoloEngine>> = if config.key_map.contains_key(&LocalKey::VISION)
-        {
-            // model_path points to the bundled model/ directory;
-            // find the first .onnx file in it.
-            let onnx_path = std::fs::read_dir(model_path)
-                .ok()
-                .and_then(|mut rd| {
-                    rd.find(|e| {
-                        e.as_ref()
-                            .map(|e| e.path().extension().and_then(|x| x.to_str()) == Some("onnx"))
-                            .unwrap_or(false)
-                    })
+        let yolo_engine = if config.vision.as_ref().map_or(false, |v| v.enable_occ) {
+            let onnx_path = std::fs::read_dir(model_path).ok().and_then(|mut rd| {
+                rd.find_map(|res| {
+                    let path = res.ok()?.path();
+                    (path.extension()?.to_str()? == "onnx").then_some(path)
                 })
-                .and_then(|e| e.ok())
-                .map(|e| e.path());
+            });
 
-            if let Some(path) = onnx_path {
-                match YoloEngine::new(path.to_str().unwrap_or("")) {
+            // 尝试初始化 YoloEngine
+            let loaded_engine =
+                onnx_path.and_then(|path| match YoloEngine::new(path.to_str().unwrap_or("")) {
                     Ok(engine) => {
                         log::info!("YoloEngine loaded: {:?}", path);
                         Some(Arc::new(engine))
@@ -241,40 +233,66 @@ impl HellcallEngine {
                         log::warn!("YoloEngine failed to load: {}", e);
                         None
                     }
-                }
-            } else {
-                log::warn!("No .onnx file found in model_path: {}", model_path);
-                None
+                });
+
+            if loaded_engine.is_none() {
+                log::warn!(
+                    "No valid .onnx file found or engine failed to load in: {}",
+                    model_path
+                );
             }
+
+            // engine 成功加载注册热键监听
+            if let (Some(engine_arc), Some(occ_input)) =
+                (&loaded_engine, config.key_map.get(&LocalKey::OCC).cloned())
+            {
+                let engine_ref = engine_arc.clone();
+
+                key_presser.listen_key(occ_input, move |pressed, push_fn| {
+                    if !pressed {
+                        return;
+                    }
+
+                    log::trace!("OCC triggered");
+                    let engine_clone = engine_ref.clone();
+
+                    std::thread::spawn(move || {
+                        // 4. 拉平线程内部逻辑，使用 Early Return
+                        let sequence = match crate::hellcall::core::vision::recognize_console_arrows(&engine_clone) {
+                            Ok(seq) => seq,
+                            Err(e) => {
+                                log::error!("Vision pipeline failed: {}", e);
+                                return;
+                            }
+                        };
+
+                        if sequence.is_empty() {
+                            log::warn!("No valid sequence found");
+                            return;
+                        }
+
+                        log::debug!("Vision sequence recognized: {:?}", sequence);
+
+                        let keys: Vec<LocalKey> = sequence
+                            .iter()
+                            .filter_map(|cmd| match cmd.as_str() {
+                                "UP" => Some(LocalKey::UP),
+                                "DOWN" => Some(LocalKey::DOWN),
+                                "LEFT" => Some(LocalKey::LEFT),
+                                "RIGHT" => Some(LocalKey::RIGHT),
+                                _ => None,
+                            })
+                            .collect();
+
+                        push_fn(keys);
+                    });
+                });
+            }
+
+            loaded_engine
         } else {
             None
         };
-
-        if let Some(vision_input) = config.key_map.get(&LocalKey::VISION).cloned() {
-            let engine_ref = yolo_engine.clone();
-            key_presser.listen_key(vision_input, move |pressed| {
-                if pressed {
-                    log::info!("Vision capture triggered");
-                    let engine = engine_ref.clone();
-                    std::thread::spawn(move || {
-                        if let Some(eng) = engine {
-                            match crate::hellcall::core::vision::recognize_console_arrows(&eng) {
-                                Ok(sequence) => {
-                                    if !sequence.is_empty() {
-                                        log::debug!("Vision sequence recognized: {:?}", sequence);
-                                    } else {
-                                        log::warn!("No valid sequence found");
-                                    }
-                                }
-                                Err(e) => log::error!("Vision pipeline failed: {}", e),
-                            }
-                        } else {
-                            log::warn!("Vision key pressed but YoloEngine not loaded");
-                        }
-                    });
-                }
-            });
-        }
 
         let command_ref = Arc::clone(&command);
         let matcher_ref = Arc::clone(&matcher);

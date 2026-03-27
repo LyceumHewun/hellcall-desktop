@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use log::{debug, info};
+use log::{debug, info, trace};
 use rdev::{simulate, Button, EventType, Key};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -32,8 +32,8 @@ pub enum LocalKey {
     RESEND,
     /// Push-to-Talk 按住说话
     PTT,
-    /// Vision Capture 触发视觉截图
-    VISION,
+    /// OCC (One-Click Completion) 触发视觉截图与自动拨号
+    OCC,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,14 @@ pub struct KeyPresser {
     worker_handle: Option<JoinHandle<()>>,
     /// 当前正在模拟按键的数量，用于 listen 回调过滤注入事件
     simulating: Arc<AtomicUsize>,
-    listen_key_map: Arc<Mutex<HashMap<Input, Box<dyn FnMut(bool) + Send + 'static>>>>,
+    listen_key_map: Arc<
+        Mutex<
+            HashMap<
+                Input,
+                Box<dyn FnMut(bool, Box<dyn Fn(Vec<LocalKey>) + Send + 'static>) + Send + 'static>,
+            >,
+        >,
+    >,
 }
 
 impl KeyPresser {
@@ -167,7 +174,7 @@ impl KeyPresser {
                     for (key, press_event_type, release_event_type) in &key_event_map {
                         if key == &LocalKey::OPEN {
                             sim(press_event_type);
-                            debug!("simulated press [OPEN] event: {:?}", press_event_type);
+                            trace!("simulated press [OPEN] event: {:?}", press_event_type);
                             open_release_event = Some(release_event_type.clone());
                             continue;
                         }
@@ -178,16 +185,16 @@ impl KeyPresser {
                         }
 
                         sim(press_event_type);
-                        debug!("simulated press event: {:?}", press_event_type);
+                        trace!("simulated press event: {:?}", press_event_type);
 
                         std::thread::sleep(Duration::from_millis(key_release_interval));
                         sim(release_event_type);
-                        debug!("simulated release event: {:?}", release_event_type);
+                        trace!("simulated release event: {:?}", release_event_type);
                         std::thread::sleep(Duration::from_millis(diff_key_interval));
                     }
                     if let Some(event) = open_release_event {
                         sim(&event);
-                        debug!("simulated release [OPEN] event: {:?}", event);
+                        trace!("simulated release [OPEN] event: {:?}", event);
                     }
 
                     simulating.fetch_sub(1, Ordering::Relaxed);
@@ -231,7 +238,7 @@ impl KeyPresser {
     /// `callback` 的参数为 `true` 表示按下，`false` 表示释放。
     pub fn listen_key<F>(&self, key: Input, callback: F)
     where
-        F: FnMut(bool) + Send + 'static,
+        F: FnMut(bool, Box<dyn Fn(Vec<LocalKey>) + Send + 'static>) + Send + 'static,
     {
         self.listen_key_map
             .lock()
@@ -256,22 +263,27 @@ impl KeyPresser {
         // block
         rdev::listen(move |event| {
             // 首先处理注册的监听按键（包括按下和松开），不受 simulate 状态影响
-            if let Ok(mut listeners) = listen_key_map.try_lock() {
-                for (input, callback) in listeners.iter_mut() {
-                    let is_press = match (&event.event_type, input) {
-                        (EventType::KeyPress(k), Input::Key(pk)) => k == pk,
-                        (EventType::ButtonPress(b), Input::Button(pb)) => b == pb,
-                        _ => false,
-                    };
-                    let is_release = match (&event.event_type, input) {
-                        (EventType::KeyRelease(k), Input::Key(pk)) => k == pk,
-                        (EventType::ButtonRelease(b), Input::Button(pb)) => b == pb,
-                        _ => false,
-                    };
-                    if is_press {
-                        callback(true);
-                    } else if is_release {
-                        callback(false);
+            {
+                // 在加锁前，提取出目标 Input 以及是否为按下状态 (is_press)
+                let event_info = match &event.event_type {
+                    EventType::KeyPress(k) => Some((Input::Key(k.clone()), true)),
+                    EventType::KeyRelease(k) => Some((Input::Key(k.clone()), false)),
+                    EventType::ButtonPress(b) => Some((Input::Button(b.clone()), true)),
+                    EventType::ButtonRelease(b) => Some((Input::Button(b.clone()), false)),
+                    _ => None,
+                };
+                // 如果属于我们关心的事件类型，再去尝试获取锁
+                if let Some((target_input, is_press)) = event_info {
+                    if let Ok(mut listeners) = listen_key_map.try_lock() {
+                        if let Some(callback) = listeners.get_mut(&target_input) {
+                            let tx_clone = tx.clone();
+                            let fn_push: Box<dyn Fn(Vec<LocalKey>) + Send + 'static> =
+                                Box::new(move |keys| {
+                                    let _ = tx_clone.send(keys);
+                                });
+
+                            callback(is_press, fn_push);
+                        }
                     }
                 }
             }

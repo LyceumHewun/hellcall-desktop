@@ -42,7 +42,7 @@
       "throw": "Throw",
       "resend": "Resend",
       "ptt": "Push-to-Talk",
-      "vision": "Vision Capture"
+      "occ": "OCC (Vision Capture)"
     }
   },
   "settings": {
@@ -70,7 +70,10 @@
     "chunk_time": "Chunk Time ({{val}}) (s)",
     "vad_silence": "VAD Silence Duration ({{val}}) (ms)",
     "enable_denoise": "Audio Denoise",
-    "enable_denoise_desc": "Filters out background noise (e.g., mechanical keyboards) to improve voice recognition accuracy."
+    "enable_denoise_desc": "Filters out background noise (e.g., mechanical keyboards) to improve voice recognition accuracy.",
+    "vision": "Vision",
+    "enable_occ": "Enable OCC (One-Click Completion)",
+    "enable_occ_desc": "Automatically execute the recognized Console Arrow sequence using macro engine."
   },
   "log": {
     "waiting": "Waiting for logs...",

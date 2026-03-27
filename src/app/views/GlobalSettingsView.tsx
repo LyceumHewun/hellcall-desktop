@@ -370,6 +370,34 @@ export function GlobalSettingsView() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100]">
+                {t("settings.vision")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label>{t("settings.enable_occ")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.enable_occ_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.vision?.enable_occ ?? true}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        if (!c.vision) c.vision = { enable_occ: checked };
+                        else c.vision.enable_occ = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>

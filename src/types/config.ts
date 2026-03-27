@@ -27,7 +27,12 @@ export interface CommandConfig {
   audio_files: string[];
 }
 
+export interface VisionConfig {
+  enable_occ: boolean;
+}
+
 export interface AppConfig {
+  vision: VisionConfig;
   recognizer: RecognizerConfig;
   key_presser: KeyPresserConfig;
   key_map: Record<string, string>;

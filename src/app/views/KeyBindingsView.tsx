@@ -100,7 +100,7 @@ export function KeyBindingsView() {
             </CardHeader>
             <CardContent>
               <div className="bg-black/30 rounded-lg border border-zinc-800 divide-y divide-zinc-800 overflow-hidden">
-                {["RESEND", "PTT", "VISION"].map((action) => {
+                {["RESEND", "PTT", "OCC"].map((action) => {
                   const keyName = bindings[action];
                   // if (!keyName) return null;
                   return (
