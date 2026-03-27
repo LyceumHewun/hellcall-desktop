@@ -15,8 +15,6 @@ use anyhow::Result;
 /// 4. Returns the final valid command sequence (e.g., ["UP", "DOWN", ...]).
 pub fn recognize_console_arrows(yolo_engine: &YoloEngine) -> Result<Vec<String>> {
     // Step 1: Trigger single-frame screen capture
-    // `capture_frame` already blocks using a sync mpsc channel to wait for the frame
-    // and returns the cropped and resized 640x640 RgbImage.
     let rgb_image = capture::capture_frame()?;
 
     // Step 2 & 3: Run YOLO Inference
