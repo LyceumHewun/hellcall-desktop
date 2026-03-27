@@ -3,3 +3,4 @@ pub mod command;
 pub mod keypress;
 pub mod matcher;
 pub mod speaker;
+pub mod vision;

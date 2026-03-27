@@ -37,6 +37,10 @@ rubato = "0.14"
 strsim = "0.11"
 vosk = "0.3"
 webrtc-vad = "0.4"
+windows-capture = "1.5"
+image = "0.24"
+ort = { version = "2.0.0-rc.6", features = ["ndarray", "cuda"] }
+ndarray = "0.17"
 
 [profile.dev]
 opt-level = 0

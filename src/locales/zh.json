@@ -41,7 +41,8 @@
       "open": "打开战备菜单",
       "throw": "投掷信标",
       "resend": "重新发送指令",
-      "ptt": "按键说话"
+      "ptt": "按键说话",
+      "occ": "一键搓终端指令"
     }
   },
   "settings": {
@@ -69,7 +70,10 @@
     "chunk_time": "音频流识别块时长 ({{val}}) (秒)",
     "vad_silence": "VAD 静音检测时长 ({{val}}) (毫秒)",
     "enable_denoise": "音频降噪",
-    "enable_denoise_desc": "过滤背景噪音（如机械键盘声）以提高语音识别准确率。"
+    "enable_denoise_desc": "过滤背景噪音（如机械键盘声）以提高语音识别准确率。",
+    "vision": "Vision",
+    "enable_occ": "启用OCC (一键搓终端指令)",
+    "enable_occ_desc": "截屏识别到合法的方向指令后，利用宏引擎按键自动输出。"
   },
   "log": {
     "waiting": "等待日志...",

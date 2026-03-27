@@ -4,14 +4,14 @@ pub mod utils;
 
 pub use config::Config;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
 use log::{info, warn};
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use std::thread;
 
@@ -21,6 +21,7 @@ use self::core::command::*;
 use self::core::keypress::*;
 use self::core::matcher::*;
 use self::core::speaker::*;
+use self::core::vision::YoloEngine;
 use self::utils::*;
 
 static AUDIO_DIR: &str = "audio";
@@ -62,6 +63,8 @@ pub struct HellcallEngine {
     // 以下两个字段由 stop(self) 转移给 EngineHandle，不在这里 drop。
     _key_presser: Arc<KeyPresser>,
     _listener_handle: Option<thread::JoinHandle<()>>,
+    /// YOLO 推理引擎（可选，仅在 VISION key 绑定时加载）
+    _yolo_engine: Option<Arc<YoloEngine>>,
 }
 
 impl HellcallEngine {
@@ -201,7 +204,7 @@ impl HellcallEngine {
                 // listen push-to-talk key
                 if let Some(ptt_input) = config.key_map.get(&LocalKey::PTT).cloned() {
                     let speech_ctrl = processor.get_speech_controller();
-                    key_presser.listen_key(ptt_input, move |speaking| {
+                    key_presser.listen_key(ptt_input, move |speaking, _push_fn| {
                         speech_ctrl.set_is_speaking(speaking);
                     });
                 }
@@ -210,6 +213,86 @@ impl HellcallEngine {
                 // nothing to do
             }
         }
+
+        let yolo_engine = if config.vision.as_ref().map_or(false, |v| v.enable_occ) {
+            let onnx_path = std::fs::read_dir(model_path).ok().and_then(|mut rd| {
+                rd.find_map(|res| {
+                    let path = res.ok()?.path();
+                    (path.extension()?.to_str()? == "onnx").then_some(path)
+                })
+            });
+
+            // 尝试初始化 YoloEngine
+            let loaded_engine =
+                onnx_path.and_then(|path| match YoloEngine::new(path.to_str().unwrap_or("")) {
+                    Ok(engine) => {
+                        log::info!("YoloEngine loaded: {:?}", path);
+                        Some(Arc::new(engine))
+                    }
+                    Err(e) => {
+                        log::warn!("YoloEngine failed to load: {}", e);
+                        None
+                    }
+                });
+
+            if loaded_engine.is_none() {
+                log::warn!(
+                    "No valid .onnx file found or engine failed to load in: {}",
+                    model_path
+                );
+            }
+
+            // engine 成功加载注册热键监听
+            if let (Some(engine_arc), Some(occ_input)) =
+                (&loaded_engine, config.key_map.get(&LocalKey::OCC).cloned())
+            {
+                let engine_ref = engine_arc.clone();
+
+                key_presser.listen_key(occ_input, move |pressed, push_fn| {
+                    if !pressed {
+                        return;
+                    }
+
+                    log::trace!("OCC triggered");
+                    let engine_clone = engine_ref.clone();
+
+                    std::thread::spawn(move || {
+                        // 4. 拉平线程内部逻辑，使用 Early Return
+                        let sequence = match crate::hellcall::core::vision::recognize_console_arrows(&engine_clone) {
+                            Ok(seq) => seq,
+                            Err(e) => {
+                                log::error!("Vision pipeline failed: {}", e);
+                                return;
+                            }
+                        };
+
+                        if sequence.is_empty() {
+                            log::warn!("No valid sequence found");
+                            return;
+                        }
+
+                        log::debug!("Vision sequence recognized: {:?}", sequence);
+
+                        let keys: Vec<LocalKey> = sequence
+                            .iter()
+                            .filter_map(|cmd| match cmd.as_str() {
+                                "UP" => Some(LocalKey::UP),
+                                "DOWN" => Some(LocalKey::DOWN),
+                                "LEFT" => Some(LocalKey::LEFT),
+                                "RIGHT" => Some(LocalKey::RIGHT),
+                                _ => None,
+                            })
+                            .collect();
+
+                        push_fn(keys);
+                    });
+                });
+            }
+
+            loaded_engine
+        } else {
+            None
+        };
 
         let command_ref = Arc::clone(&command);
         let matcher_ref = Arc::clone(&matcher);
@@ -263,6 +346,7 @@ impl HellcallEngine {
             cancel_flag,
             _key_presser: key_presser,
             _listener_handle: Some(listener_handle),
+            _yolo_engine: yolo_engine,
         })
     }
 

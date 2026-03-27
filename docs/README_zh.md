@@ -12,6 +12,7 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 - **可配置的识别器：** 调整 VAD（语音活动检测）静音持续时间和音频块(chunk)时间，以获得最佳响应速度。
 - **高级按键模拟：** 微调按键释放间隔、按键间间隔以及初始等待时间。
 - **自定义触发器和宏：** 定义特定的命中词、语法和后备快捷键来触发序列。您还可以分配自定义的音频反馈（例如，`normal_reply.wav`）。
+- **基于视觉的 OCC：** 使用实验性的“一键完成”(One-Click Completion) 视觉模块，通过 YOLO 计算机视觉自动识别游戏状态并瞬间触发战略配备。
 - **现代化 UI：** 使用 React 19、Tailwind CSS 4 和 Radix UI 构建。它具有时尚的、受游戏启发的黑暗主题，并支持拖拽界面来对宏进行排序。
 - **多语言支持：** 由 `react-i18next` 提供支持的多语言界面（英文和中文）。
 
@@ -20,6 +21,7 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 - **前端：** React 19, Vite, TypeScript, Tailwind CSS 4, Zustand (状态管理), @dnd-kit (拖拽), Radix UI。
 - **后端/桌面框架：** Tauri 2.0, Rust。
 - **语音引擎：** 集成 [Vosk](https://alphacephei.com/vosk/) 语音识别引擎。
+- **计算机视觉：** 由 [ONNX Runtime (ort)](https://github.com/ort-rs/ort) 提供支持的高性能 YOLO 推理引擎，支持 CUDA 硬件加速。
 
 ## 先决条件
 

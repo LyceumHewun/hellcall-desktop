@@ -7,7 +7,21 @@ use super::core::audio::AudioRecognizerConfig;
 use super::core::keypress::{Input, KeyPresserConfig, LocalKey};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct VisionConfig {
+    #[serde(default)]
+    pub enable_occ: bool,
+}
+
+impl Default for VisionConfig {
+    fn default() -> Self {
+        Self { enable_occ: true }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
+    #[serde(default)]
+    pub vision: Option<VisionConfig>,
     pub recognizer: RecognizerConfig,
     pub key_presser: KeyPresserConfig,
     /// 按键映射
@@ -69,6 +83,7 @@ pub struct CommandConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            vision: Some(VisionConfig::default()),
             recognizer: RecognizerConfig::default(),
             key_presser: KeyPresserConfig::default(),
             key_map: HashMap::from([
