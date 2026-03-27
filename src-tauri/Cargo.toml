@@ -1,6 +1,6 @@
 [package]
 name = "hellcall-desktop"
-version = "0.1.1"
+version = "1.0.0"
 description = "helldivers 2 voice macro tool"
 authors = ["LyceumHewun <hewun@lyceum.cc>"]
 edition = "2021"
