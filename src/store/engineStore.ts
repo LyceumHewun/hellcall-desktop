@@ -3,15 +3,15 @@ import { create } from "zustand";
 export type EngineStatus = "OFFLINE" | "STARTING" | "ACTIVE";
 const VOSK_MODEL_STORAGE_KEY = "hellcall.selectedVoskModelId";
 const DEFAULT_VOSK_MODEL_ID = "vosk-model-small-cn-0.22";
+const VISION_MODEL_STORAGE_KEY = "hellcall.selectedVisionModelId";
+const DEFAULT_VISION_MODEL_ID = "helldivers2-yolo-v8n";
 
-const getStoredVoskModelId = () => {
+const getStoredModelId = (storageKey: string, fallback: string) => {
   if (typeof window === "undefined") {
-    return DEFAULT_VOSK_MODEL_ID;
+    return fallback;
   }
 
-  return (
-    window.localStorage.getItem(VOSK_MODEL_STORAGE_KEY) || DEFAULT_VOSK_MODEL_ID
-  );
+  return window.localStorage.getItem(storageKey) || fallback;
 };
 
 interface EngineState {
@@ -23,6 +23,10 @@ interface EngineState {
   setSelectedVoskModelId: (modelId: string) => void;
   selectedVoskModelReady: boolean | null;
   setSelectedVoskModelReady: (ready: boolean | null) => void;
+  selectedVisionModelId: string;
+  setSelectedVisionModelId: (modelId: string) => void;
+  selectedVisionModelReady: boolean | null;
+  setSelectedVisionModelReady: (ready: boolean | null) => void;
 }
 
 export const useEngineStore = create<EngineState>((set) => ({
@@ -30,7 +34,10 @@ export const useEngineStore = create<EngineState>((set) => ({
   setStatus: (status) => set({ status }),
   selectedDevice: null,
   setSelectedDevice: (device) => set({ selectedDevice: device }),
-  selectedVoskModelId: getStoredVoskModelId(),
+  selectedVoskModelId: getStoredModelId(
+    VOSK_MODEL_STORAGE_KEY,
+    DEFAULT_VOSK_MODEL_ID,
+  ),
   setSelectedVoskModelId: (modelId) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(VOSK_MODEL_STORAGE_KEY, modelId);
@@ -39,4 +46,17 @@ export const useEngineStore = create<EngineState>((set) => ({
   },
   selectedVoskModelReady: null,
   setSelectedVoskModelReady: (ready) => set({ selectedVoskModelReady: ready }),
+  selectedVisionModelId: getStoredModelId(
+    VISION_MODEL_STORAGE_KEY,
+    DEFAULT_VISION_MODEL_ID,
+  ),
+  setSelectedVisionModelId: (modelId) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(VISION_MODEL_STORAGE_KEY, modelId);
+    }
+    set({ selectedVisionModelId: modelId });
+  },
+  selectedVisionModelReady: null,
+  setSelectedVisionModelReady: (ready) =>
+    set({ selectedVisionModelReady: ready }),
 }));

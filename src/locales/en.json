@@ -71,6 +71,8 @@
     "vad_silence": "VAD Silence Duration ({{val}}) (ms)",
     "vosk_model": "Vosk Model",
     "vosk_model_placeholder": "Select a model",
+    "vision_model": "Vision Model",
+    "vision_model_placeholder": "Select a model",
     "download_model": "Download Model",
     "model_ready": "Ready",
     "model_loading": "Loading models...",

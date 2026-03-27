@@ -226,38 +226,24 @@ impl HellcallEngine {
         }
 
         let vision_config = &config.vision;
-        let vision_model_path = vision_model_path
-            .filter(|path| !path.is_empty())
-            .unwrap_or_else(|| vosk_model_path.to_string());
         let yolo_engine = if vision_config.enable_occ {
-            let onnx_path = std::fs::read_dir(&vision_model_path)
-                .ok()
-                .and_then(|mut rd| {
-                    rd.find_map(|res| {
-                        let path = res.ok()?.path();
-                        (path.extension()?.to_str()? == "onnx").then_some(path)
-                    })
-                });
-
-            // 尝试初始化 YoloEngine
-            let loaded_engine =
-                onnx_path.and_then(|path| match YoloEngine::new(path.to_str().unwrap_or("")) {
+            let loaded_engine = if let Some(vision_model_path) =
+                vision_model_path.filter(|path| !path.is_empty())
+            {
+                match YoloEngine::new(&vision_model_path) {
                     Ok(engine) => {
-                        log::info!("YoloEngine loaded: {:?}", path);
+                        log::info!("YoloEngine loaded: {:?}", vision_model_path);
                         Some(Arc::new(engine))
                     }
                     Err(e) => {
                         log::warn!("YoloEngine failed to load: {}", e);
                         None
                     }
-                });
-
-            if loaded_engine.is_none() {
-                log::warn!(
-                    "No valid .onnx file found or engine failed to load in: {}",
-                    vision_model_path
-                );
-            }
+                }
+            } else {
+                log::warn!("Vision model is not downloaded; OCC will remain unavailable");
+                None
+            };
 
             // engine 成功加载注册热键监听
             if let (Some(engine_arc), Some(occ_input)) =

@@ -1,7 +1,8 @@
+mod asset_manager;
 mod hellcall;
 mod utils;
-mod vosk_model_manager;
 
+use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
@@ -31,6 +32,13 @@ fn get_available_vosk_models(
 }
 
 #[tauri::command]
+fn get_available_vision_models(
+    app_handle: AppHandle,
+) -> Result<Vec<vision_model_manager::AvailableVisionModel>, String> {
+    vision_model_manager::get_available_models(&app_handle)
+}
+
+#[tauri::command]
 async fn download_vosk_model(
     app_handle: AppHandle,
     model_id: String,
@@ -40,12 +48,22 @@ async fn download_vosk_model(
 }
 
 #[tauri::command]
+async fn download_vision_model(
+    app_handle: AppHandle,
+    model_id: String,
+    url: String,
+) -> Result<bool, String> {
+    vision_model_manager::download_model(&app_handle, model_id, url).await
+}
+
+#[tauri::command]
 fn start_engine(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     config: Config,
     device_name: Option<String>,
     selected_model_id: String,
+    selected_vision_model_id: String,
 ) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
 
@@ -57,11 +75,11 @@ fn start_engine(
         vosk_model_manager::resolve_selected_model_path(&app_handle, &selected_model_id)?;
     let vosk_model_path = utils::normalize_runtime_path(&vosk_model_path);
 
-    let vision_model_path = app_handle
-        .path()
-        .resolve("model/", BaseDirectory::Resource)
-        .map_err(|e| utils::format_and_log_error("Failed to resolve vision model path", e))?;
-    let vision_model_path = utils::normalize_runtime_path(&vision_model_path);
+    let vision_model_path = vision_model_manager::resolve_selected_model_path_if_downloaded(
+        &app_handle,
+        &selected_vision_model_id,
+    )?;
+    let vision_model_path = vision_model_path.map(|path| utils::normalize_runtime_path(&path));
 
     let audio_path = app_handle
         .path()
@@ -78,7 +96,7 @@ fn start_engine(
                 &vosk_model_path,
                 device_name.clone(),
                 Some(audio_path.clone()),
-                Some(vision_model_path.clone()),
+                vision_model_path.clone(),
             )
             .map_err(|e| utils::format_and_log_error("Failed to restart engine", e))?,
         _ => HellcallEngine::start(
@@ -86,7 +104,7 @@ fn start_engine(
             &vosk_model_path,
             device_name,
             Some(audio_path),
-            Some(vision_model_path),
+            vision_model_path,
         )
         .map_err(|e| utils::format_and_log_error("Failed to start engine", e))?,
     };
@@ -262,7 +280,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
+            get_available_vision_models,
             download_vosk_model,
+            download_vision_model,
             get_audio_devices,
             start_mic_test,
             stop_mic_test,

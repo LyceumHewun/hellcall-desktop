@@ -20,6 +20,8 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
     selectedVoskModelId,
     selectedVoskModelReady,
     setSelectedVoskModelReady,
+    selectedVisionModelId,
+    setSelectedVisionModelReady,
   } = useEngineStore();
 
   useEffect(() => {
@@ -27,21 +29,31 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
     const syncSelectedModelState = async () => {
       try {
-        const models = await invoke<
-          Array<{ id: string; is_downloaded: boolean }>
-        >("get_available_vosk_models");
+        const [voskModels, visionModels] = await Promise.all([
+          invoke<Array<{ id: string; is_downloaded: boolean }>>(
+            "get_available_vosk_models",
+          ),
+          invoke<Array<{ id: string; is_downloaded: boolean }>>(
+            "get_available_vision_models",
+          ),
+        ]);
         if (cancelled) {
           return;
         }
 
-        const selectedModel = models.find(
+        const selectedVoskModel = voskModels.find(
           (model) => model.id === selectedVoskModelId,
         );
-        setSelectedVoskModelReady(Boolean(selectedModel?.is_downloaded));
+        const selectedVisionModel = visionModels.find(
+          (model) => model.id === selectedVisionModelId,
+        );
+        setSelectedVoskModelReady(Boolean(selectedVoskModel?.is_downloaded));
+        setSelectedVisionModelReady(Boolean(selectedVisionModel?.is_downloaded));
       } catch (error) {
         if (!cancelled) {
-          console.error("Failed to load Vosk model status:", error);
+          console.error("Failed to load model status:", error);
           setSelectedVoskModelReady(false);
+          setSelectedVisionModelReady(null);
         }
       }
     };
@@ -51,7 +63,12 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedVoskModelId, setSelectedVoskModelReady]);
+  }, [
+    selectedVisionModelId,
+    selectedVoskModelId,
+    setSelectedVisionModelReady,
+    setSelectedVoskModelReady,
+  ]);
 
   const toggleEngine = async () => {
     if (status === "OFFLINE") {
@@ -91,6 +108,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           config: sanitizedConfig,
           deviceName: selectedDevice,
           selectedModelId: selectedVoskModelId,
+          selectedVisionModelId,
         });
         setStatus("ACTIVE");
       } catch (error) {

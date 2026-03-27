@@ -35,7 +35,7 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-[#0F1115]">
       <CustomTitlebar />
-      <Toaster position="bottom-left" />
+      <Toaster theme="dark" richColors position="bottom-left" />
 
       <div className="flex-1 flex overflow-hidden">
         <Sidebar activeNav={activeNav} setActiveNav={setActiveNav} />

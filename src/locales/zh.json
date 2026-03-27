@@ -71,6 +71,8 @@
     "vad_silence": "VAD 静音检测时长 ({{val}}) (毫秒)",
     "vosk_model": "Vosk 模型",
     "vosk_model_placeholder": "选择模型",
+    "vision_model": "视觉模型",
+    "vision_model_placeholder": "选择模型",
     "download_model": "下载模型",
     "model_ready": "已就绪",
     "model_loading": "正在加载模型...",

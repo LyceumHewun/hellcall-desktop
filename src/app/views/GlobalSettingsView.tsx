@@ -22,6 +22,7 @@ import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
 import { ModelSelector } from "../components/ModelSelector";
+import { VisionModelSelector } from "../components/VisionModelSelector";
 import { useConfigStore } from "../../store/configStore";
 import { useEngineStore } from "../../store/engineStore";
 import { useTranslation } from "react-i18next";
@@ -333,6 +334,10 @@ export function GlobalSettingsView() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-3">
+                <VisionModelSelector />
+              </div>
+
+              <div className="space-y-3">
                 <Label>{t("settings.enable_occ")}</Label>
                 <div className="flex items-center justify-between space-x-4">
                   <p className="text-sm text-white/50">
@@ -365,7 +370,7 @@ export function GlobalSettingsView() {
                 </Label>
                 <Slider
                   value={[config.vision?.capture_ratio ?? 0.8]}
-                  min={0.1}
+                  min={0.5}
                   max={1.0}
                   step={0.05}
                   onValueChange={([val]) =>
