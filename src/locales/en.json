@@ -41,7 +41,8 @@
       "open": "Open",
       "throw": "Throw",
       "resend": "Resend",
-      "ptt": "Push-to-Talk"
+      "ptt": "Push-to-Talk",
+      "vision": "Vision Capture"
     }
   },
   "settings": {

@@ -1,6 +1,6 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use log::{debug, info};
-use rdev::{Button, EventType, Key, simulate};
+use rdev::{simulate, Button, EventType, Key};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{
@@ -32,6 +32,8 @@ pub enum LocalKey {
     RESEND,
     /// Push-to-Talk 按住说话
     PTT,
+    /// Vision Capture 触发视觉截图
+    VISION,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

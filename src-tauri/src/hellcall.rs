@@ -21,6 +21,7 @@ use self::core::command::*;
 use self::core::keypress::*;
 use self::core::matcher::*;
 use self::core::speaker::*;
+use self::core::vision::YoloEngine;
 use self::utils::*;
 
 static AUDIO_DIR: &str = "audio";
@@ -62,6 +63,8 @@ pub struct HellcallEngine {
     // 以下两个字段由 stop(self) 转移给 EngineHandle，不在这里 drop。
     _key_presser: Arc<KeyPresser>,
     _listener_handle: Option<thread::JoinHandle<()>>,
+    /// YOLO 推理引擎（可选，仅在 VISION key 绑定时加载）
+    _yolo_engine: Option<Arc<YoloEngine>>,
 }
 
 impl HellcallEngine {
@@ -211,6 +214,71 @@ impl HellcallEngine {
             }
         }
 
+        // Vision capture + YOLO inference (optional binding)
+        let yolo_engine: Option<Arc<YoloEngine>> =
+            if config.key_map.contains_key(&LocalKey::VISION) {
+                // model_path points to the bundled model/ directory;
+                // find the first .onnx file in it.
+                let onnx_path = std::fs::read_dir(model_path)
+                    .ok()
+                    .and_then(|mut rd| {
+                        rd.find(|e| {
+                            e.as_ref()
+                                .map(|e| {
+                                    e.path()
+                                        .extension()
+                                        .and_then(|x| x.to_str())
+                                        == Some("onnx")
+                                })
+                                .unwrap_or(false)
+                        })
+                    })
+                    .and_then(|e| e.ok())
+                    .map(|e| e.path());
+
+                if let Some(path) = onnx_path {
+                    match YoloEngine::new(path.to_str().unwrap_or("")) {
+                        Ok(engine) => {
+                            log::info!("YoloEngine loaded: {:?}", path);
+                            Some(Arc::new(engine))
+                        }
+                        Err(e) => {
+                            log::warn!("YoloEngine failed to load: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    log::warn!("No .onnx file found in model_path: {}", model_path);
+                    None
+                }
+            } else {
+                None
+            };
+
+        if let Some(vision_input) = config.key_map.get(&LocalKey::VISION).cloned() {
+            let engine_ref = yolo_engine.clone();
+            key_presser.listen_key(vision_input, move |pressed| {
+                if pressed {
+                    log::info!("Vision capture triggered");
+                    let engine = engine_ref.clone();
+                    std::thread::spawn(move || {
+                        match crate::hellcall::core::vision::capture_frame() {
+                            Ok(img) => {
+                                if let Some(eng) = engine {
+                                    if let Err(e) = eng.infer(img) {
+                                        log::error!("YOLO inference failed: {}", e);
+                                    }
+                                } else {
+                                    log::warn!("Vision key pressed but YoloEngine not loaded");
+                                }
+                            }
+                            Err(e) => log::error!("Vision capture failed: {}", e),
+                        }
+                    });
+                }
+            });
+        }
+
         let command_ref = Arc::clone(&command);
         let matcher_ref = Arc::clone(&matcher);
         let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -263,6 +331,7 @@ impl HellcallEngine {
             cancel_flag,
             _key_presser: key_presser,
             _listener_handle: Some(listener_handle),
+            _yolo_engine: yolo_engine,
         })
     }
 
