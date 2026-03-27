@@ -13,9 +13,12 @@ use anyhow::Result;
 /// 2. Feeds the cropped 640x640 frame into YOLO.
 /// 3. Corrects and filters the raw bounding boxes.
 /// 4. Returns the final valid command sequence (e.g., ["UP", "DOWN", ...]).
-pub fn recognize_console_arrows(yolo_engine: &YoloEngine) -> Result<Vec<String>> {
+pub fn recognize_console_arrows(
+    yolo_engine: &YoloEngine,
+    capture_ratio: f32,
+) -> Result<Vec<String>> {
     // Step 1: Trigger single-frame screen capture
-    let rgb_image = capture::capture_frame()?;
+    let rgb_image = capture::capture_frame(capture_ratio)?;
 
     // Step 2 & 3: Run YOLO Inference
     let raw_detections = yolo_engine.infer(rgb_image)?;

@@ -73,7 +73,8 @@
     "enable_denoise_desc": "过滤背景噪音（如机械键盘声）以提高语音识别准确率。",
     "vision": "Vision",
     "enable_occ": "启用OCC (一键搓终端指令)",
-    "enable_occ_desc": "截屏识别到合法的方向指令后，利用宏引擎按键自动输出。"
+    "enable_occ_desc": "截屏识别到合法的方向指令后，利用宏引擎按键自动输出。",
+    "capture_ratio": "截屏缩放判定比例 ({{val}}x)"
   },
   "log": {
     "waiting": "等待日志...",

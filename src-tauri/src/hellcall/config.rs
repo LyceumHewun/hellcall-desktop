@@ -6,15 +6,26 @@ use std::collections::HashMap;
 use super::core::audio::AudioRecognizerConfig;
 use super::core::keypress::{Input, KeyPresserConfig, LocalKey};
 
+fn default_capture_ratio() -> f32 {
+    0.8
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VisionConfig {
     #[serde(default)]
     pub enable_occ: bool,
+    /// Capture ratio for the center crop (e.g., 0.8 means crop 80% of the shortest edge).
+    /// Default should be 0.8 or similar, but we will use serde default.
+    #[serde(default = "default_capture_ratio")]
+    pub capture_ratio: f32,
 }
 
 impl Default for VisionConfig {
     fn default() -> Self {
-        Self { enable_occ: true }
+        Self {
+            enable_occ: true,
+            capture_ratio: 0.8,
+        }
     }
 }
 

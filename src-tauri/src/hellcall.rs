@@ -247,6 +247,7 @@ impl HellcallEngine {
                 (&loaded_engine, config.key_map.get(&LocalKey::OCC).cloned())
             {
                 let engine_ref = engine_arc.clone();
+                let capture_ratio = config.vision.as_ref().unwrap().capture_ratio;
 
                 key_presser.listen_key(occ_input, move |pressed, push_fn| {
                     if !pressed {
@@ -258,7 +259,7 @@ impl HellcallEngine {
 
                     std::thread::spawn(move || {
                         // 4. 拉平线程内部逻辑，使用 Early Return
-                        let sequence = match crate::hellcall::core::vision::recognize_console_arrows(&engine_clone) {
+                        let sequence = match crate::hellcall::core::vision::recognize_console_arrows(&engine_clone, capture_ratio) {
                             Ok(seq) => seq,
                             Err(e) => {
                                 log::error!("Vision pipeline failed: {}", e);

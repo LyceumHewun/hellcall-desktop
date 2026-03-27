@@ -29,6 +29,7 @@ export interface CommandConfig {
 
 export interface VisionConfig {
   enable_occ: boolean;
+  capture_ratio: number;
 }
 
 export interface AppConfig {

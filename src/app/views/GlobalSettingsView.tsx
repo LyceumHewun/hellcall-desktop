@@ -389,12 +389,41 @@ export function GlobalSettingsView() {
                     checked={config.vision?.enable_occ ?? true}
                     onCheckedChange={(checked) =>
                       updateConfig((c) => {
-                        if (!c.vision) c.vision = { enable_occ: checked };
-                        else c.vision.enable_occ = checked;
+                        if (!c.vision) {
+                          c.vision = {
+                            enable_occ: checked,
+                            capture_ratio: 0.5,
+                          };
+                        } else {
+                          c.vision.enable_occ = checked;
+                        }
                       })
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.capture_ratio", {
+                    val: (config.vision?.capture_ratio ?? 0.8).toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.vision?.capture_ratio ?? 0.8]}
+                  min={0.1}
+                  max={1.0}
+                  step={0.05}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      if (!c.vision) {
+                        c.vision = { enable_occ: true, capture_ratio: val };
+                      } else {
+                        c.vision.capture_ratio = val;
+                      }
+                    })
+                  }
+                />
               </div>
             </CardContent>
           </Card>

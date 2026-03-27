@@ -73,7 +73,8 @@
     "enable_denoise_desc": "Filters out background noise (e.g., mechanical keyboards) to improve voice recognition accuracy.",
     "vision": "Vision",
     "enable_occ": "Enable OCC (One-Click Completion)",
-    "enable_occ_desc": "Automatically execute the recognized Console Arrow sequence using macro engine."
+    "enable_occ_desc": "Automatically execute the recognized Console Arrow sequence using macro engine.",
+    "capture_ratio": "Capture Zoom Ratio ({{val}}x)"
   },
   "log": {
     "waiting": "Waiting for logs...",

@@ -14,15 +14,18 @@ use windows_capture::{
 
 struct SingleFrameHandler {
     captured_image: Option<RgbImage>,
+    capture_ratio: f32,
 }
 
 impl GraphicsCaptureApiHandler for SingleFrameHandler {
-    type Flags = ();
+    type Flags = f32;
     type Error = anyhow::Error;
 
-    fn new(_ctx: CaptureContext<Self::Flags>) -> Result<Self, Self::Error> {
+    fn new(ctx: CaptureContext<Self::Flags>) -> Result<Self, Self::Error> {
+        // Will adjust depending on how flags are exposed (could be ctx.flags() or just .flags depending on crate vers)
         Ok(Self {
             captured_image: None,
+            capture_ratio: ctx.flags,
         })
     }
 
@@ -46,7 +49,10 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
         let rgba = RgbaImage::from_raw(width, height, raw.to_vec())
             .context("Failed to build RgbaImage from frame buffer")?;
 
-        let s = width.min(height);
+        let base_s = width.min(height) as f32;
+        let clamped_ratio = self.capture_ratio.clamp(0.1, 1.0);
+        let s = (base_s * clamped_ratio) as u32;
+
         let start_x = (width - s) / 2;
         let start_y = (height - s) / 2;
         let cropped = imageops::crop_imm(&rgba, start_x, start_y, s, s).to_image();
@@ -65,8 +71,8 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
     }
 }
 
-/// 从主显示器捕获一帧，裁剪中心 1:1 正方形，缩放到 640×640，返回 RgbImage。
-pub fn capture_frame() -> Result<RgbImage> {
+/// 从主显示器捕获一帧，根据 capture_ratio 裁剪中心区域正方形，缩放到 640×640，返回 RgbImage。
+pub fn capture_frame(capture_ratio: f32) -> Result<RgbImage> {
     let monitor = Monitor::primary().context("Failed to get primary monitor")?;
     let settings = Settings::new(
         monitor,
@@ -76,7 +82,7 @@ pub fn capture_frame() -> Result<RgbImage> {
         MinimumUpdateIntervalSettings::Default,
         DirtyRegionSettings::Default,
         ColorFormat::Rgba8,
-        (),
+        capture_ratio,
     );
 
     let control = SingleFrameHandler::start_free_threaded(settings)
