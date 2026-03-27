@@ -21,6 +21,7 @@ import { Slider } from "../components/ui/slider";
 import { Label } from "../components/ui/label";
 import { Input } from "../components/ui/input";
 import { Switch } from "../components/ui/switch";
+import { ModelSelector } from "../components/ModelSelector";
 import { useConfigStore } from "../../store/configStore";
 import { useEngineStore } from "../../store/engineStore";
 import { useTranslation } from "react-i18next";
@@ -197,122 +198,14 @@ export function GlobalSettingsView() {
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
               <CardTitle className="text-[#FCE100] font-bold">
-                {t("settings.trigger")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>
-                  {t("settings.talk_mode", "Voice Recognition Mode")}
-                </Label>
-                <Select
-                  value={config.recognizer.talk_mode || "voice_activation"}
-                  onValueChange={(val) =>
-                    updateConfig((c) => {
-                      c.recognizer.talk_mode = val as any;
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
-                    <SelectValue placeholder="Voice Activation" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
-                    <SelectItem value="voice_activation">
-                      {t("settings.talk_mode_vad", "Voice Activation")}
-                    </SelectItem>
-                    <SelectItem value="push_to_talk">
-                      {t("settings.talk_mode_ptt", "Push-to-Talk")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("settings.hit_word")}</Label>
-                <Input
-                  className="bg-black/30 border-white/10"
-                  value={config.trigger.hit_word || ""}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.trigger.hit_word = e.target.value;
-                    })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("settings.hit_word_grammar")}</Label>
-                <Input
-                  className="bg-black/30 border-white/10"
-                  value={config.trigger.hit_word_grammar || ""}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.trigger.hit_word_grammar = e.target.value;
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#1E2128] border-white/10 text-white">
-            <CardHeader>
-              <CardTitle className="text-[#FCE100] font-bold">
-                {t("settings.key_presser")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>{t("settings.wait_open_time")}</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.wait_open_time}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.wait_open_time = Number(e.target.value);
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("settings.key_release_interval")}</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.key_release_interval}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.key_release_interval = Number(
-                        e.target.value,
-                      );
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("settings.diff_key_interval")}</Label>
-                <Input
-                  type="number"
-                  className="bg-black/30 border-white/10"
-                  value={config.key_presser.diff_key_interval}
-                  onChange={(e) =>
-                    updateConfig((c) => {
-                      c.key_presser.diff_key_interval = Number(e.target.value);
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#1E2128] border-white/10 text-white">
-            <CardHeader>
-              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.recognizer")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <ModelSelector />
+              </div>
+
               <div className="space-y-3">
                 <Label>
                   {t("settings.chunk_time", {
@@ -374,6 +267,67 @@ export function GlobalSettingsView() {
           <Card className="bg-[#1E2128] border-white/10 text-white">
             <CardHeader>
               <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.trigger")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>
+                  {t("settings.talk_mode", "Voice Recognition Mode")}
+                </Label>
+                <Select
+                  value={config.recognizer.talk_mode || "voice_activation"}
+                  onValueChange={(val) =>
+                    updateConfig((c) => {
+                      c.recognizer.talk_mode = val as any;
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue placeholder="Voice Activation" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="voice_activation">
+                      {t("settings.talk_mode_vad", "Voice Activation")}
+                    </SelectItem>
+                    <SelectItem value="push_to_talk">
+                      {t("settings.talk_mode_ptt", "Push-to-Talk")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.hit_word")}</Label>
+                <Input
+                  className="bg-black/30 border-white/10"
+                  value={config.trigger.hit_word || ""}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.trigger.hit_word = e.target.value;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.hit_word_grammar")}</Label>
+                <Input
+                  className="bg-black/30 border-white/10"
+                  value={config.trigger.hit_word_grammar || ""}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.trigger.hit_word_grammar = e.target.value;
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
                 {t("settings.vision")}
               </CardTitle>
             </CardHeader>
@@ -421,6 +375,57 @@ export function GlobalSettingsView() {
                       } else {
                         c.vision.capture_ratio = val;
                       }
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.key_presser")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>{t("settings.wait_open_time")}</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.wait_open_time}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.wait_open_time = Number(e.target.value);
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("settings.key_release_interval")}</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.key_release_interval}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.key_release_interval = Number(
+                        e.target.value,
+                      );
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("settings.diff_key_interval")}</Label>
+                <Input
+                  type="number"
+                  className="bg-black/30 border-white/10"
+                  value={config.key_presser.diff_key_interval}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.key_presser.diff_key_interval = Number(e.target.value);
                     })
                   }
                 />

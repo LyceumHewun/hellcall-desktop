@@ -226,7 +226,10 @@ pub fn load_config_from_path(config_path: &Path) -> Result<Config, String> {
             Ok(final_config)
         }
         Err(e) => {
-            log::error!("Config has invalid TOML syntax, backing up and resetting: {}", e);
+            log::error!(
+                "Config has invalid TOML syntax, backing up and resetting: {}",
+                e
+            );
             let bak_path = config_path.with_extension("toml.bak");
             let _ = fs::rename(config_path, &bak_path);
 

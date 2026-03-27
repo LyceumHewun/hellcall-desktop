@@ -38,15 +38,17 @@ impl EngineHandle {
     pub fn restart(
         self,
         config: Config,
-        model_path: &str,
+        vosk_model_path: &str,
         input_device_name: Option<String>,
         audio_dir: Option<String>,
+        vision_model_path: Option<String>,
     ) -> Result<HellcallEngine> {
         HellcallEngine::start_inner(
             config,
-            model_path,
+            vosk_model_path,
             input_device_name,
             audio_dir,
+            vision_model_path,
             Some((self.key_presser, self.listener_handle)),
         )
     }
@@ -70,18 +72,27 @@ pub struct HellcallEngine {
 impl HellcallEngine {
     pub fn start(
         config: Config,
-        model_path: &str,
+        vosk_model_path: &str,
         input_device_name: Option<String>,
         audio_dir: Option<String>,
+        vision_model_path: Option<String>,
     ) -> Result<Self> {
-        Self::start_inner(config, model_path, input_device_name, audio_dir, None)
+        Self::start_inner(
+            config,
+            vosk_model_path,
+            input_device_name,
+            audio_dir,
+            vision_model_path,
+            None,
+        )
     }
 
     fn start_inner(
         config: Config,
-        model_path: &str,
+        vosk_model_path: &str,
         input_device_name: Option<String>,
         audio_dir: Option<String>,
+        vision_model_path: Option<String>,
         existing: Option<(Arc<KeyPresser>, thread::JoinHandle<()>)>,
     ) -> Result<Self> {
         // 选择输入设备
@@ -195,7 +206,7 @@ impl HellcallEngine {
         }
 
         audio_recognizer_config.set_grammar(grammar);
-        let recognizer = AudioRecognizer::new(model_path, audio_recognizer_config)?;
+        let recognizer = AudioRecognizer::new(vosk_model_path, audio_recognizer_config)?;
         let mut processor =
             AudioBufferProcessor::new_with_input_device_name(recognizer, input_device)?;
 
@@ -215,13 +226,18 @@ impl HellcallEngine {
         }
 
         let vision_config = &config.vision;
+        let vision_model_path = vision_model_path
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| vosk_model_path.to_string());
         let yolo_engine = if vision_config.enable_occ {
-            let onnx_path = std::fs::read_dir(model_path).ok().and_then(|mut rd| {
-                rd.find_map(|res| {
-                    let path = res.ok()?.path();
-                    (path.extension()?.to_str()? == "onnx").then_some(path)
-                })
-            });
+            let onnx_path = std::fs::read_dir(&vision_model_path)
+                .ok()
+                .and_then(|mut rd| {
+                    rd.find_map(|res| {
+                        let path = res.ok()?.path();
+                        (path.extension()?.to_str()? == "onnx").then_some(path)
+                    })
+                });
 
             // 尝试初始化 YoloEngine
             let loaded_engine =
@@ -239,7 +255,7 @@ impl HellcallEngine {
             if loaded_engine.is_none() {
                 log::warn!(
                     "No valid .onnx file found or engine failed to load in: {}",
-                    model_path
+                    vision_model_path
                 );
             }
 

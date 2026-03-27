@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Settings, Keyboard, Command, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
@@ -12,7 +13,45 @@ interface SidebarProps {
 
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   const { t } = useTranslation();
-  const { status, setStatus, selectedDevice } = useEngineStore();
+  const {
+    status,
+    setStatus,
+    selectedDevice,
+    selectedVoskModelId,
+    selectedVoskModelReady,
+    setSelectedVoskModelReady,
+  } = useEngineStore();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncSelectedModelState = async () => {
+      try {
+        const models = await invoke<
+          Array<{ id: string; is_downloaded: boolean }>
+        >("get_available_vosk_models");
+        if (cancelled) {
+          return;
+        }
+
+        const selectedModel = models.find(
+          (model) => model.id === selectedVoskModelId,
+        );
+        setSelectedVoskModelReady(Boolean(selectedModel?.is_downloaded));
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load Vosk model status:", error);
+          setSelectedVoskModelReady(false);
+        }
+      }
+    };
+
+    syncSelectedModelState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVoskModelId, setSelectedVoskModelReady]);
 
   const toggleEngine = async () => {
     if (status === "OFFLINE") {
@@ -24,6 +63,10 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         (c) => c.command.trim() !== "" && c.keys.length > 0,
       ).length;
       if (validMacrosCount === 0) {
+        return;
+      }
+
+      if (selectedVoskModelReady === false) {
         return;
       }
 
@@ -47,6 +90,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         await invoke("start_engine", {
           config: sanitizedConfig,
           deviceName: selectedDevice,
+          selectedModelId: selectedVoskModelId,
         });
         setStatus("ACTIVE");
       } catch (error) {
@@ -65,13 +109,15 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
   const isActive = status === "ACTIVE";
   const isStarting = status === "STARTING";
+  const isStartDisabled =
+    isStarting || (!isActive && selectedVoskModelReady === false);
 
   return (
     <div className="w-64 bg-[#0F1115] border-r border-white/10 flex flex-col p-4 gap-6">
       {/* Status Toggle */}
       <button
         onClick={toggleEngine}
-        disabled={isStarting}
+        disabled={isStartDisabled}
         className={`relative overflow-hidden transition-all duration-300 cursor-pointer border-2 rounded p-4 group disabled:opacity-80 disabled:hover:scale-100 disabled:cursor-not-allowed ${
           isActive || isStarting
             ? "bg-[#FCE100] border-[#FCE100] shadow-[0_0_20px_rgba(252,225,0,0.3)]"
@@ -169,6 +215,12 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           <span>{t("nav.settings")}</span>
         </button>
       </nav>
+
+      {selectedVoskModelReady === false && !isActive ? (
+        <p className="mt-auto px-1 text-xs text-amber-300/80">
+          {t("settings.model_required")}
+        </p>
+      ) : null}
 
       <style>{`
         @keyframes pulse {

@@ -1,11 +1,12 @@
 mod hellcall;
+mod utils;
+mod vosk_model_manager;
+
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
-
-mod utils;
 
 enum AppEngine {
     None,
@@ -23,11 +24,28 @@ struct AppState {
 }
 
 #[tauri::command]
+fn get_available_vosk_models(
+    app_handle: AppHandle,
+) -> Result<Vec<vosk_model_manager::AvailableVoskModel>, String> {
+    vosk_model_manager::get_available_models(&app_handle)
+}
+
+#[tauri::command]
+async fn download_vosk_model(
+    app_handle: AppHandle,
+    model_id: String,
+    url: String,
+) -> Result<bool, String> {
+    vosk_model_manager::download_model(&app_handle, model_id, url).await
+}
+
+#[tauri::command]
 fn start_engine(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     config: Config,
     device_name: Option<String>,
+    selected_model_id: String,
 ) -> Result<String, String> {
     let mut engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
 
@@ -35,30 +53,42 @@ fn start_engine(
         return Ok("Already started".into());
     }
 
-    let model_path = app_handle
+    let vosk_model_path =
+        vosk_model_manager::resolve_selected_model_path(&app_handle, &selected_model_id)?;
+    let vosk_model_path = utils::normalize_runtime_path(&vosk_model_path);
+
+    let vision_model_path = app_handle
         .path()
         .resolve("model/", BaseDirectory::Resource)
-        .map_err(|e| utils::format_and_log_error("Failed to resolve model path", e))?
-        .to_string_lossy()
-        .replace("\\\\?\\", "") // on Windows can return paths with \\?\ prefix, which causes issues with some libraries
-        .to_string();
+        .map_err(|e| utils::format_and_log_error("Failed to resolve vision model path", e))?;
+    let vision_model_path = utils::normalize_runtime_path(&vision_model_path);
 
     let audio_path = app_handle
         .path()
         .resolve("audio/", BaseDirectory::Resource)
-        .map_err(|e| utils::format_and_log_error("Failed to resolve audio path", e))?
-        .to_string_lossy()
-        .replace("\\\\?\\", "")
-        .to_string();
+        .map_err(|e| utils::format_and_log_error("Failed to resolve audio path", e))?;
+    let audio_path = utils::normalize_runtime_path(&audio_path);
 
     let state_taken = std::mem::replace(&mut *engine_guard, AppEngine::None);
 
     let engine = match state_taken {
         AppEngine::Stopped(handle) => handle
-            .restart(config, &model_path, device_name.clone(), Some(audio_path))
+            .restart(
+                config,
+                &vosk_model_path,
+                device_name.clone(),
+                Some(audio_path.clone()),
+                Some(vision_model_path.clone()),
+            )
             .map_err(|e| utils::format_and_log_error("Failed to restart engine", e))?,
-        _ => HellcallEngine::start(config, &model_path, device_name, Some(audio_path))
-            .map_err(|e| utils::format_and_log_error("Failed to start engine", e))?,
+        _ => HellcallEngine::start(
+            config,
+            &vosk_model_path,
+            device_name,
+            Some(audio_path),
+            Some(vision_model_path),
+        )
+        .map_err(|e| utils::format_and_log_error("Failed to start engine", e))?,
     };
 
     *engine_guard = AppEngine::Running(engine);
@@ -231,6 +261,8 @@ pub fn run() {
             mic_test_stream: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            get_available_vosk_models,
+            download_vosk_model,
             get_audio_devices,
             start_mic_test,
             stop_mic_test,
