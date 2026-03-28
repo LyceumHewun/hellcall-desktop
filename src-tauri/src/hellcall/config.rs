@@ -8,9 +8,22 @@ use toml::Value;
 
 use super::core::audio::AudioRecognizerConfig;
 use super::core::keypress::{Input, KeyPresserConfig, LocalKey};
+use super::core::speaker::SpeakerRuntimeConfig;
 
 fn default_capture_ratio() -> f32 {
     0.8
+}
+
+fn default_speaker_volume() -> f32 {
+    1.7
+}
+
+fn default_speaker_speed() -> f32 {
+    1.05
+}
+
+fn default_speaker_sleep_until_end() -> bool {
+    true
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -37,6 +50,8 @@ impl Default for VisionConfig {
 pub struct Config {
     #[serde(default)]
     pub vision: VisionConfig,
+    #[serde(default)]
+    pub speaker: SpeakerConfig,
     pub recognizer: RecognizerConfig,
     pub key_presser: KeyPresserConfig,
     /// 按键映射
@@ -55,6 +70,17 @@ pub struct Config {
     pub key_map: HashMap<LocalKey, Input>,
     pub trigger: TriggerConfig,
     pub commands: Vec<CommandConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct SpeakerConfig {
+    #[serde(default = "default_speaker_volume")]
+    pub volume: f32,
+    #[serde(default = "default_speaker_speed")]
+    pub speed: f32,
+    #[serde(default = "default_speaker_sleep_until_end")]
+    pub sleep_until_end: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -102,6 +128,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             vision: VisionConfig::default(),
+            speaker: SpeakerConfig::default(),
             recognizer: RecognizerConfig::default(),
             key_presser: KeyPresserConfig::default(),
             key_map: HashMap::from([
@@ -114,6 +141,26 @@ impl Default for Config {
             ]),
             trigger: TriggerConfig::default(),
             commands: Vec::new(),
+        }
+    }
+}
+
+impl Default for SpeakerConfig {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            speed: 1.0,
+            sleep_until_end: true,
+        }
+    }
+}
+
+impl From<SpeakerConfig> for SpeakerRuntimeConfig {
+    fn from(config: SpeakerConfig) -> Self {
+        Self {
+            volume: config.volume,
+            speed: config.speed,
+            sleep_until_end: config.sleep_until_end,
         }
     }
 }

@@ -437,6 +437,71 @@ export function GlobalSettingsView() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.speaker")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.speaker_volume", {
+                    val: config.speaker.volume.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.volume]}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.volume = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.speaker_speed", {
+                    val: config.speaker.speed.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.speed]}
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.speed = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.speaker_wait_end")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.speaker_wait_end_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.speaker.sleep_until_end}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.speaker.sleep_until_end = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>

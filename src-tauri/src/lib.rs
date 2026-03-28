@@ -140,13 +140,23 @@ fn load_config(app: AppHandle) -> Result<Config, String> {
 }
 
 #[tauri::command]
-fn save_config(app: AppHandle, new_config: Config) -> Result<bool, String> {
+fn save_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    new_config: Config,
+) -> Result<bool, String> {
     let config_path = app
         .path()
         .app_config_dir()
         .map_err(|e| e.to_string())?
         .join("config.toml");
     save_config_to_path(&config_path, &new_config)?;
+
+    let engine_guard = state.engine.lock().map_err(|e| e.to_string())?;
+    if let AppEngine::Running(engine) = &*engine_guard {
+        engine.update_speaker_config(new_config.speaker.clone().into());
+    }
+
     Ok(true)
 }
 

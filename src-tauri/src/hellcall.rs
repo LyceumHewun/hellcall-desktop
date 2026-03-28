@@ -144,7 +144,7 @@ impl HellcallEngine {
         key_presser.clear_listen_map();
 
         // 初始化 Speaker（每次都新建，stop 时会随 Engine 一起 drop）
-        let speaker = Arc::new(Speaker::new()?);
+        let speaker = Arc::new(Speaker::new(config.speaker.clone().into())?);
 
         // 构建命令表
         let command_map: HashMap<String, Box<dyn Fn() + Send + Sync>> = config
@@ -351,6 +351,10 @@ impl HellcallEngine {
             _listener_handle: Some(listener_handle),
             _yolo_engine: yolo_engine,
         })
+    }
+
+    pub fn update_speaker_config(&self, config: SpeakerRuntimeConfig) {
+        self._speaker.update_config(config);
     }
 
     /// 停止引擎，消耗 self。

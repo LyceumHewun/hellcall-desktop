@@ -32,8 +32,15 @@ export interface VisionConfig {
   capture_ratio: number;
 }
 
+export interface SpeakerConfig {
+  volume: number;
+  speed: number;
+  sleep_until_end: boolean;
+}
+
 export interface AppConfig {
   vision: VisionConfig;
+  speaker: SpeakerConfig;
   recognizer: RecognizerConfig;
   key_presser: KeyPresserConfig;
   key_map: Record<string, string>;
