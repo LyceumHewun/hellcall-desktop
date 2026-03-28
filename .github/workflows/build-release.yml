@@ -174,37 +174,6 @@ jobs:
           updaterJsonPreferNsis: true
           uploadUpdaterSignatures: true
 
-      - name: Collect updater metadata
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bundleDir = Join-Path $env:GITHUB_WORKSPACE 'src-tauri\target\release\bundle'
-          $artifactDir = Join-Path $env:RUNNER_TEMP 'tauri-updater-metadata'
-
-          if (-not (Test-Path $bundleDir)) {
-            throw "Bundle directory not found: $bundleDir"
-          }
-
-          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-
-          $jsonFiles = Get-ChildItem -Path $bundleDir -Recurse -File |
-            Where-Object { $_.Extension -eq '.json' }
-
-          if (-not $jsonFiles) {
-            throw "No updater JSON files found under $bundleDir"
-          }
-
-          foreach ($file in $jsonFiles) {
-            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
-          }
-
-      - name: Upload updater metadata artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tauri-updater-metadata
-          if-no-files-found: error
-          path: ${{ runner.temp }}/tauri-updater-metadata
-
   publish-updater-json:
     needs: build-and-release
     runs-on: ubuntu-latest
@@ -225,12 +194,6 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Download updater metadata artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tauri-updater-metadata
-          path: .artifacts/updater
-
       - name: Generate updater.json for GitHub Pages
         shell: bash
         env:
@@ -242,42 +205,11 @@ jobs:
           mkdir -p pages
           node <<'NODE'
           const fs = require('node:fs');
-          const path = require('node:path');
 
           async function main() {
-            const artifactRoot = path.resolve('.artifacts/updater');
             const repo = process.env.GITHUB_REPOSITORY;
             const tag = process.env.GITHUB_REF_NAME;
             const token = process.env.GITHUB_TOKEN;
-            const jsonFiles = [];
-
-            const walk = (dir) => {
-              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-                const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                  walk(fullPath);
-                } else if (entry.isFile() && entry.name.endsWith('.json')) {
-                  jsonFiles.push(fullPath);
-                }
-              }
-            };
-
-            if (!fs.existsSync(artifactRoot)) {
-              throw new Error(`Updater artifact directory not found: ${artifactRoot}`);
-            }
-
-            walk(artifactRoot);
-
-            if (jsonFiles.length === 0) {
-              throw new Error('No updater JSON files were found in the downloaded artifact.');
-            }
-
-            const generatedManifestPath =
-              jsonFiles.find((file) => path.basename(file).toLowerCase() === 'latest.json') ??
-              jsonFiles[0];
-            const generatedManifest = JSON.parse(
-              fs.readFileSync(generatedManifestPath, 'utf8'),
-            );
 
             const releaseResponse = await fetch(
               `https://api.github.com/repos/${repo}/releases/tags/${tag}`,
@@ -299,63 +231,35 @@ jobs:
 
             const release = await releaseResponse.json();
             const assets = release.assets ?? [];
-            const existingPlatform =
-              generatedManifest.platforms?.['windows-x86_64'] ??
-              (generatedManifest.url && generatedManifest.signature
-                ? {
-                    url: generatedManifest.url,
-                    signature: generatedManifest.signature,
-                  }
-                : null);
 
-            if (!existingPlatform) {
-              throw new Error(
-                `Unsupported updater manifest shape in ${generatedManifestPath}.`,
-              );
-            }
-
-            const candidateAssetNames = [];
-
-            if (existingPlatform.url) {
-              try {
-                candidateAssetNames.push(path.basename(new URL(existingPlatform.url).pathname));
-              } catch {
-                candidateAssetNames.push(path.basename(existingPlatform.url));
-              }
-            }
-
-            const zipAsset =
-              candidateAssetNames
-                .map((name) => assets.find((asset) => asset.name === name))
-                .find(Boolean) ??
+            const updaterAsset =
               assets.find(
-                (asset) => /nsis/i.test(asset.name) && /\.zip$/i.test(asset.name),
+                (asset) => /nsis/i.test(asset.name) && /setup\.exe$/i.test(asset.name),
               ) ??
               assets.find(
-                (asset) =>
-                  /\.zip$/i.test(asset.name) &&
-                  !asset.name.endsWith('.sig') &&
-                  !/latest\.json$/i.test(asset.name) &&
-                  !/updater\.json$/i.test(asset.name),
+                (asset) => /setup\.exe$/i.test(asset.name) && !asset.name.endsWith('.sig'),
+              ) ??
+              assets.find(
+                (asset) => /\.msi$/i.test(asset.name) && !asset.name.endsWith('.sig'),
               );
 
-            if (!zipAsset) {
+            if (!updaterAsset) {
               throw new Error(
-                `Could not find the updater zip asset in release ${release.tag_name}.`,
+                `Could not find the updater installer asset in release ${release.tag_name}.`,
               );
             }
 
             const sigAsset =
-              assets.find((asset) => asset.name === `${zipAsset.name}.sig`) ??
+              assets.find((asset) => asset.name === `${updaterAsset.name}.sig`) ??
               assets.find(
                 (asset) =>
                   asset.name.endsWith('.sig') &&
-                  asset.name.replace(/\.sig$/i, '') === zipAsset.name,
+                  asset.name.replace(/\.sig$/i, '') === updaterAsset.name,
               );
 
             if (!sigAsset) {
               throw new Error(
-                `Could not find the signature asset for ${zipAsset.name} in release ${release.tag_name}.`,
+                `Could not find the signature asset for ${updaterAsset.name} in release ${release.tag_name}.`,
               );
             }
 
@@ -375,27 +279,19 @@ jobs:
 
             const signature = (await sigResponse.text()).trim();
             const updaterManifest = {
-              version: (generatedManifest.version ?? release.tag_name).replace(/^v/, ''),
-              notes:
-                generatedManifest.notes ??
-                generatedManifest.body ??
-                release.body ??
-                '',
-              pub_date:
-                generatedManifest.pub_date ??
-                generatedManifest.date ??
-                release.published_at ??
-                new Date().toISOString(),
+              version: release.tag_name.replace(/^v/, ''),
+              notes: release.body ?? '',
+              pub_date: release.published_at ?? new Date().toISOString(),
               platforms: {
                 'windows-x86_64': {
-                  url: zipAsset.browser_download_url,
+                  url: updaterAsset.browser_download_url,
                   signature,
                 },
               },
             };
 
             fs.writeFileSync(
-              path.resolve('pages', 'updater.json'),
+              'pages/updater.json',
               `${JSON.stringify(updaterManifest, null, 2)}\n`,
             );
           }
