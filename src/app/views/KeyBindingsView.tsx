@@ -124,6 +124,12 @@ export function KeyBindingsView() {
                           handleKeyRecorded(action, newKeyCode)
                         }
                         onCancelRecording={() => setActiveRecordingAction(null)}
+                        onClear={() => {
+                          updateConfig((c) => {
+                            delete c.key_map[action];
+                          });
+                          setActiveRecordingAction(null);
+                        }}
                       />
                     </div>
                   );
