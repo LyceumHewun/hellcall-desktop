@@ -90,7 +90,6 @@ impl KeyPresser {
             LocalKey::LEFT,
             LocalKey::RIGHT,
             LocalKey::OPEN,
-            LocalKey::RESEND,
             LocalKey::THROW,
         ] {
             if !key_map.contains_key(&local_key) {
