@@ -1,0 +1,95 @@
+name: Build And Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src-tauri/tauri.conf.json
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download Vosk DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/alphacep/vosk-api/releases'
+          $asset = $null
+
+          foreach ($release in $releases) {
+            $asset = $release.assets |
+              Where-Object { $_.name -match 'win64.*\.zip$' } |
+              Select-Object -First 1
+
+            if ($asset) {
+              break
+            }
+          }
+
+          if (-not $asset) {
+            throw 'Could not find a Windows x64 Vosk release asset.'
+          }
+
+          $downloadDir = Join-Path $env:RUNNER_TEMP 'vosk-api'
+          $zipPath = Join-Path $downloadDir $asset.name
+          $extractPath = Join-Path $downloadDir 'extract'
+          $targetDir = Join-Path $env:GITHUB_WORKSPACE 'src-tauri\lib'
+
+          New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+          $dlls = Get-ChildItem -Path $extractPath -Recurse -File |
+            Where-Object { $_.Extension -eq '.dll' }
+
+          if (-not $dlls) {
+            throw 'Could not find any DLL files after extracting the Vosk archive.'
+          }
+
+          foreach ($dll in $dlls) {
+            Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $targetDir $dll.Name) -Force
+          }
+
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          bundleTypes: nsis
+          tagName: build-${{ github.run_id }}-${{ github.run_attempt }}
+          releaseName: Build ${{ github.run_number }}
+          releaseBody: |
+            Automated release for commit ${{ github.sha }}.
+          releaseDraft: false
+          prerelease: true
