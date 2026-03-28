@@ -29,17 +29,21 @@ Hellcall Desktop is a cross-platform desktop application built with Tauri, React
 - Rust (Latest stable toolchain)
 - Bun (or your preferred Node package manager)
 
-## Vosk Setup
+## Model Setup
 
-This project relies on the Vosk speech recognition engine. Before running or building the application, you must download the appropriate language model and native library into the `src-tauri` directory.
+Hellcall now downloads speech and vision model assets at runtime into the application's writable data directory. You no longer need to manually unpack model files into the repo before using the app.
 
-1. **Vosk Library (`src-tauri/lib`)**:
-   Download the precompiled `libvosk` library for your operating system (Windows/macOS/Linux) from the [Vosk Releases page](https://github.com/alphacep/vosk-api/releases). Extract the files and place the dynamic library (e.g., `.dll`, `.dylib`, or `.so`) inside the `src-tauri/lib/` directory.
+1. **Native Vosk Library (`src-tauri/lib`)**:
+   Download the precompiled `libvosk` library for your operating system (Windows/macOS/Linux) from the [Vosk Releases page](https://github.com/alphacep/vosk-api/releases). Extract the files and place the dynamic library (for example `.dll`, `.dylib`, or `.so`) inside `src-tauri/lib/`.
 
-2. **Vosk Model (`src-tauri/model`)**:
-   Download a Vosk language model from the [Vosk Models page](https://alphacephei.com/vosk/models).
-   - **Important**: You must download a **"small"** model (e.g., `vosk-model-small-en-us-0.15` for English or `vosk-model-small-cn-0.22` for Chinese). Large models are not optimized for this real-time macro use case.
-   - Extract the contents of the downloaded model zip file (the internal files like `am`, `conf`, `graph`, `ivector`) directly into the `src-tauri/model/` directory.
+2. **Vosk Speech Models**:
+   Open **Global Settings** in the app, choose a Vosk model, and click **Download Model**.
+   - Use a **small** Vosk model such as `vosk-model-small-en-us-0.15` or `vosk-model-small-cn-0.22`.
+   - Downloaded Vosk assets are stored under the app's local data directory at `models/vosk/<model-id>/`.
+
+3. **Vision / OCC Model (Optional)**:
+   The YOLO `.onnx` model used by OCC can also be downloaded from **Global Settings**.
+   - The file is stored under the app's local data directory at `models/vision/`.
 
 ## Getting Started
 
@@ -60,7 +64,7 @@ This project relies on the Vosk speech recognition engine. Before running or bui
    ```bash
    bun tauri dev
    ```
-   This command starts the Vite development server and launches the Tauri window.
+   This command starts the Vite development server and launches the Tauri window. After the app opens, download the Vosk model you want from **Global Settings** before enabling Voice Link.
 
 4. **Build for production:**
    ```bash
@@ -71,7 +75,7 @@ This project relies on the Vosk speech recognition engine. Before running or bui
 ## Directory Structure
 
 - `/src` - React frontend code (UI components, Views, Zustand store, Types).
-- `/src-tauri` - Rust backend, Tauri configuration, native plugins, and static assets (like acoustic models and audio files).
+- `/src-tauri` - Rust backend, Tauri configuration, native plugins, and bundled runtime dependencies (such as audio assets and the native Vosk library).
 - `/src/store` - Zustand store (`configStore.ts`) for managing global state and interacting with the Rust backend.
 - `/src/app/views` - Core views including Macros, Global Settings, Key Bindings, and Logs.
 
@@ -82,6 +86,8 @@ Settings are managed seamlessly and saved locally via Tauri's application data d
 - Key simulation timings
 - Trigger word logic
 - Complete list of saved command macros
+
+Downloaded model assets are also stored in the app's local data directory rather than in the installation folder, so they remain writable after packaging.
 
 ## License
 

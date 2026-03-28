@@ -29,17 +29,23 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 - Rust (最新的 stable 工具链)
 - Bun (或您喜欢的 Node 包管理器)
 
-## Vosk 配置
+## 模型安装
 
-该项目依赖于 Vosk 语音识别引擎。在运行或构建应用程序之前，您必须下载相应的语言模型和原生库，并将其放入 `src-tauri` 目录中。
+Hellcall 现在会在运行时将语音和视觉模型下载到应用程序的可写数据目录中，因此不再需要在运行前手动把模型文件解压到仓库目录里。
 
 1. **Vosk 原生库 (`src-tauri/lib`)**:
    从 [Vosk Releases 页面](https://github.com/alphacep/vosk-api/releases) 下载适用于您操作系统（Windows/macOS/Linux）的预编译 `libvosk` 库。解压缩文件并将动态库（例如 `.dll`、`.dylib` 或 `.so`）放在 `src-tauri/lib/` 目录中。
 
-2. **Vosk 模型 (`src-tauri/model`)**:
-   从 [Vosk Models 页面](https://alphacephei.com/vosk/models) 下载 Vosk 语言模型。
-   - **注意**：您必须下载 **"small" (小型)** 模型（例如，英语使用 `vosk-model-small-en-us-0.15`，中文使用 `vosk-model-small-cn-0.22`）。大型模型没有针对这种实时宏触发用例进行优化。
-   - 将下载的模型 zip 文件的内容（内部文件，如 `am`, `conf`, `graph`, `ivector`）直接解压到 `src-tauri/model/` 目录中。
+2. **Vosk 语音模型**:
+   打开应用中的 **Global Settings**，选择一个 Vosk 模型，然后点击 **Download Model**。
+   - **注意**：请使用 **small（小型）** 模型，例如英语 `vosk-model-small-en-us-0.15` 或中文 `vosk-model-small-cn-0.22`。
+   - 下载后的 Vosk 资源会存储在应用本地数据目录下的 `models/vosk/<model-id>/`。
+   - 如果是旧版本安装，之前保存在 `vosk_models/` 下的模型会自动迁移到新目录。
+
+3. **视觉 / OCC 模型（可选）**:
+   OCC 使用的 YOLO `.onnx` 模型也可以在 **Global Settings** 中下载。
+   - 文件会存储在应用本地数据目录下的 `models/vision/`。
+   - 如果没有下载视觉模型，Voice Link 依然可以正常启动，只是 OCC 功能不可用。
 
 ## 快速开始
 
@@ -59,7 +65,7 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
    ```bash
    bun tauri dev
    ```
-   此命令启动 Vite 开发服务器并启动 Tauri 窗口。
+   此命令启动 Vite 开发服务器并启动 Tauri 窗口。应用启动后，请先到 **Global Settings** 下载您要使用的 Vosk 模型，再启用 Voice Link。
 
 4. **构建生产版本：**
    ```bash
@@ -70,7 +76,7 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 ## 目录结构
 
 - `/src` - React 前端代码 (UI 组件, 视图, Zustand store, 类型声明)。
-- `/src-tauri` - Rust 后端, Tauri 配置, 原生插件，以及静态资产 (如声学模型和音频文件)。
+- `/src-tauri` - Rust 后端, Tauri 配置, 原生插件，以及随应用分发的运行时依赖（例如音频资源和 Vosk 原生库）。
 - `/src/store` - Zustand store (`configStore.ts`) 用于管理全局状态并与 Rust 后端进行交互。
 - `/src/app/views` - 核心视图页面，包括 宏配置 (Macros)、全局设置 (Global Settings)、按键绑定 (Key Bindings) 和 日志 (Logs)。
 
@@ -81,6 +87,8 @@ Hellcall Desktop 是一款基于 Tauri、React 和 Rust 构建的跨平台桌面
 - 按键模拟的时序参数
 - 触发词逻辑
 - 完整的已保存宏命令列表
+
+下载后的模型资源同样保存在应用本地数据目录中，而不是安装目录，因此打包后的应用也可以正常写入和更新模型文件。
 
 ## 许可证
 
