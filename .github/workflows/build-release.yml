@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   build-and-release:
@@ -15,6 +17,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -30,6 +37,18 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+
+      - name: Validate tag matches app version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $config = Get-Content 'src-tauri/tauri.conf.json' | ConvertFrom-Json
+          $expectedTag = "v$($config.version)"
+          $actualTag = "${{ github.ref_name }}"
+
+          if ($actualTag -ne $expectedTag) {
+            throw "Tag $actualTag does not match src-tauri/tauri.conf.json version $($config.version)."
+          }
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -80,15 +99,258 @@ jobs:
           }
 
       - name: Build and publish Tauri app
-        uses: tauri-apps/tauri-action@v0
+        id: tauri
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          bundleTypes: nsis
-          tagName: v__VERSION__
-          releaseName: Build ${{ github.run_number }}
+          tagName: ${{ github.ref_name }}
+          releaseName: Hellcall Desktop ${{ github.ref_name }}
           releaseBody: |
-            Automated release for commit ${{ github.sha }}.
+            See the assets to download and install this version.
           releaseDraft: false
-          prerelease: true
+          prerelease: false
+          generateReleaseNotes: true
+          args: --bundles nsis
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+
+      - name: Collect updater metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundleDir = Join-Path $env:GITHUB_WORKSPACE 'src-tauri\target\release\bundle'
+          $artifactDir = Join-Path $env:RUNNER_TEMP 'tauri-updater-metadata'
+
+          if (-not (Test-Path $bundleDir)) {
+            throw "Bundle directory not found: $bundleDir"
+          }
+
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $jsonFiles = Get-ChildItem -Path $bundleDir -Recurse -File |
+            Where-Object { $_.Extension -eq '.json' }
+
+          if (-not $jsonFiles) {
+            throw "No updater JSON files found under $bundleDir"
+          }
+
+          foreach ($file in $jsonFiles) {
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $artifactDir $file.Name) -Force
+          }
+
+      - name: Upload updater metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-updater-metadata
+          if-no-files-found: error
+          path: ${{ runner.temp }}/tauri-updater-metadata
+
+  publish-updater-json:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Download updater metadata artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-updater-metadata
+          path: .artifacts/updater
+
+      - name: Generate updater.json for GitHub Pages
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p pages
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          async function main() {
+            const artifactRoot = path.resolve('.artifacts/updater');
+            const repo = process.env.GITHUB_REPOSITORY;
+            const tag = process.env.GITHUB_REF_NAME;
+            const token = process.env.GITHUB_TOKEN;
+            const jsonFiles = [];
+
+            const walk = (dir) => {
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                  walk(fullPath);
+                } else if (entry.isFile() && entry.name.endsWith('.json')) {
+                  jsonFiles.push(fullPath);
+                }
+              }
+            };
+
+            if (!fs.existsSync(artifactRoot)) {
+              throw new Error(`Updater artifact directory not found: ${artifactRoot}`);
+            }
+
+            walk(artifactRoot);
+
+            if (jsonFiles.length === 0) {
+              throw new Error('No updater JSON files were found in the downloaded artifact.');
+            }
+
+            const generatedManifestPath =
+              jsonFiles.find((file) => path.basename(file).toLowerCase() === 'latest.json') ??
+              jsonFiles[0];
+            const generatedManifest = JSON.parse(
+              fs.readFileSync(generatedManifestPath, 'utf8'),
+            );
+
+            const releaseResponse = await fetch(
+              `https://api.github.com/repos/${repo}/releases/tags/${tag}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+              },
+            );
+
+            if (!releaseResponse.ok) {
+              const responseBody = await releaseResponse.text();
+              throw new Error(
+                `Failed to fetch release metadata: ${releaseResponse.status} ${responseBody}`,
+              );
+            }
+
+            const release = await releaseResponse.json();
+            const assets = release.assets ?? [];
+            const existingPlatform =
+              generatedManifest.platforms?.['windows-x86_64'] ??
+              (generatedManifest.url && generatedManifest.signature
+                ? {
+                    url: generatedManifest.url,
+                    signature: generatedManifest.signature,
+                  }
+                : null);
+
+            if (!existingPlatform) {
+              throw new Error(
+                `Unsupported updater manifest shape in ${generatedManifestPath}.`,
+              );
+            }
+
+            const candidateAssetNames = [];
+
+            if (existingPlatform.url) {
+              try {
+                candidateAssetNames.push(path.basename(new URL(existingPlatform.url).pathname));
+              } catch {
+                candidateAssetNames.push(path.basename(existingPlatform.url));
+              }
+            }
+
+            const zipAsset =
+              candidateAssetNames
+                .map((name) => assets.find((asset) => asset.name === name))
+                .find(Boolean) ??
+              assets.find(
+                (asset) => /nsis/i.test(asset.name) && /\.zip$/i.test(asset.name),
+              ) ??
+              assets.find(
+                (asset) =>
+                  /\.zip$/i.test(asset.name) &&
+                  !asset.name.endsWith('.sig') &&
+                  !/latest\.json$/i.test(asset.name) &&
+                  !/updater\.json$/i.test(asset.name),
+              );
+
+            if (!zipAsset) {
+              throw new Error(
+                `Could not find the updater zip asset in release ${release.tag_name}.`,
+              );
+            }
+
+            const sigAsset =
+              assets.find((asset) => asset.name === `${zipAsset.name}.sig`) ??
+              assets.find(
+                (asset) =>
+                  asset.name.endsWith('.sig') &&
+                  asset.name.replace(/\.sig$/i, '') === zipAsset.name,
+              );
+
+            if (!sigAsset) {
+              throw new Error(
+                `Could not find the signature asset for ${zipAsset.name} in release ${release.tag_name}.`,
+              );
+            }
+
+            const sigResponse = await fetch(sigAsset.browser_download_url, {
+              headers: {
+                Accept: 'text/plain',
+                Authorization: `Bearer ${token}`,
+              },
+            });
+
+            if (!sigResponse.ok) {
+              const responseBody = await sigResponse.text();
+              throw new Error(
+                `Failed to download signature asset ${sigAsset.name}: ${sigResponse.status} ${responseBody}`,
+              );
+            }
+
+            const signature = (await sigResponse.text()).trim();
+            const updaterManifest = {
+              version: (generatedManifest.version ?? release.tag_name).replace(/^v/, ''),
+              notes:
+                generatedManifest.notes ??
+                generatedManifest.body ??
+                release.body ??
+                '',
+              pub_date:
+                generatedManifest.pub_date ??
+                generatedManifest.date ??
+                release.published_at ??
+                new Date().toISOString(),
+              platforms: {
+                'windows-x86_64': {
+                  url: zipAsset.browser_download_url,
+                  signature,
+                },
+              },
+            };
+
+            fs.writeFileSync(
+              path.resolve('pages', 'updater.json'),
+              `${JSON.stringify(updaterManifest, null, 2)}\n`,
+            );
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
