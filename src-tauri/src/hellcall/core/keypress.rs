@@ -309,10 +309,12 @@ impl KeyPresser {
                 let Ok(km) = key_map.try_read() else {
                     return;
                 };
-                (
-                    km.get(&LocalKey::OPEN).unwrap().clone(),
-                    km.get(&LocalKey::RESEND).unwrap().clone(),
-                )
+                let Some(open_key) = km.get(&LocalKey::OPEN).cloned() else {
+                    log::warn!("missing OPEN key mapping while listening; skipping event");
+                    return;
+                };
+
+                (open_key, km.get(&LocalKey::RESEND).cloned())
             };
 
             if input == open_key {
@@ -324,7 +326,7 @@ impl KeyPresser {
                         }
                     }
                 }
-            } else if input == resend_key {
+            } else if resend_key.as_ref() == Some(&input) {
                 // 先读 spare_stack，再写 one_stack，避免同时持有两把锁（防死锁）
                 let keys_opt = spare_stack.try_lock().ok().and_then(|g| g.clone());
                 if let Some(keys) = keys_opt {
