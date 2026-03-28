@@ -38,17 +38,35 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
-      - name: Validate tag matches app version
+      - name: Sync app version from tag
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $config = Get-Content 'src-tauri/tauri.conf.json' | ConvertFrom-Json
-          $expectedTag = "v$($config.version)"
-          $actualTag = "${{ github.ref_name }}"
+          $version = '${{ github.ref_name }}' -replace '^v', ''
 
-          if ($actualTag -ne $expectedTag) {
-            throw "Tag $actualTag does not match src-tauri/tauri.conf.json version $($config.version)."
+          if (-not $version) {
+            throw 'Could not derive version from tag name.'
           }
+
+          $packageJsonPath = 'package.json'
+          $packageJson = Get-Content $packageJsonPath | ConvertFrom-Json
+          $packageJson.version = $version
+          $packageJson | ConvertTo-Json -Depth 100 | Set-Content $packageJsonPath
+
+          $tauriConfigPath = 'src-tauri/tauri.conf.json'
+          $tauriConfig = Get-Content $tauriConfigPath | ConvertFrom-Json
+          $tauriConfig.version = $version
+          $tauriConfig | ConvertTo-Json -Depth 100 | Set-Content $tauriConfigPath
+
+          $cargoTomlPath = 'src-tauri/Cargo.toml'
+          $cargoToml = Get-Content $cargoTomlPath -Raw
+          $cargoToml = [regex]::Replace(
+            $cargoToml,
+            '(?m)^version\s*=\s*"[^"]+"',
+            "version = `"$version`"",
+            1
+          )
+          Set-Content $cargoTomlPath $cargoToml
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
