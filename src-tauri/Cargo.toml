@@ -45,6 +45,8 @@ windows-capture = "1.5"
 image = "0.24"
 ort = { version = "2.0.0-rc.6", features = ["ndarray", "cuda"] }
 ndarray = "0.17"
+tauri-plugin-updater = "2.10.0"
+tauri-plugin-process = "2.3.1"
 
 [profile.dev]
 opt-level = 0

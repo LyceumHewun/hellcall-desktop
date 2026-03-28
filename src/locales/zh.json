@@ -90,5 +90,16 @@
   "log": {
     "waiting": "等待日志...",
     "scroll_bottom": "↓ 滚动到底部"
+  },
+  "updater": {
+    "checking": "正在检查更新",
+    "title": "发现新版本：{{version}}",
+    "description": "检测到新版本，已准备好下载并安装。",
+    "release_notes": "更新说明",
+    "no_release_notes": "本次更新未提供版本说明。",
+    "ignore": "忽略",
+    "install_and_relaunch": "安装并重启",
+    "downloading": "正在下载更新...",
+    "install_failed_fallback": "安装更新失败。"
   }
 }

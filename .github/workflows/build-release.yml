@@ -2,10 +2,8 @@ name: Build And Release
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - src-tauri/tauri.conf.json
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -85,9 +83,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         with:
           bundleTypes: nsis
-          tagName: build-${{ github.run_id }}-${{ github.run_attempt }}
+          tagName: v__VERSION__
           releaseName: Build ${{ github.run_number }}
           releaseBody: |
             Automated release for commit ${{ github.sha }}.

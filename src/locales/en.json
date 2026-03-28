@@ -90,5 +90,16 @@
   "log": {
     "waiting": "Waiting for logs...",
     "scroll_bottom": "↓ Scroll to bottom"
+  },
+  "updater": {
+    "checking": "Checking for updates",
+    "title": "New Version Available: {{version}}",
+    "description": "A new release is ready to download and install.",
+    "release_notes": "Release Notes",
+    "no_release_notes": "No release notes were provided.",
+    "ignore": "Ignore",
+    "install_and_relaunch": "Install and Relaunch",
+    "downloading": "Downloading update...",
+    "install_failed_fallback": "Failed to install update."
   }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CustomTitlebar } from "./components/CustomTitlebar";
 import { Sidebar } from "./components/Sidebar";
+import { UpdaterDialog } from "./components/UpdaterDialog";
 import { Loader2 } from "lucide-react";
 import { GlobalSettingsView } from "./views/GlobalSettingsView";
 import { KeyBindingsView } from "./views/KeyBindingsView";
@@ -36,6 +37,7 @@ export default function App() {
     <div className="h-screen w-screen flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-[#0F1115]">
       <CustomTitlebar />
       <Toaster theme="dark" richColors position="bottom-left" />
+      <UpdaterDialog />
 
       <div className="flex-1 flex overflow-hidden">
         <Sidebar activeNav={activeNav} setActiveNav={setActiveNav} />
