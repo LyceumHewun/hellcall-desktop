@@ -11,6 +11,25 @@ import { LogView } from "./views/LogView";
 import { Toaster } from "sonner";
 import { useConfigStore } from "../store/configStore";
 
+const toasterOptions = {
+  style: {
+    background: "var(--popover)",
+    color: "var(--popover-foreground)",
+  },
+  classNames: {
+    toast:
+      "rounded-lg border border-border shadow-lg backdrop-blur-sm bg-popover text-popover-foreground",
+    title: "text-foreground",
+    description: "text-muted-foreground",
+    actionButton: "!bg-primary !text-primary-foreground",
+    cancelButton: "!bg-secondary !text-secondary-foreground",
+    success: "!border-emerald-500/30",
+    error: "!border-destructive/50",
+    warning: "!border-amber-500/40",
+    info: "!border-primary/40",
+  },
+} as const;
+
 export default function App() {
   const { config, isLoading, fetchConfig } = useConfigStore();
   const [activeNav, setActiveNav] = useState("macros");
@@ -36,7 +55,12 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-[#0F1115]">
       <CustomTitlebar />
-      <Toaster theme="dark" richColors position="bottom-left" />
+      <Toaster
+        theme="dark"
+        richColors
+        position="bottom-left"
+        toastOptions={toasterOptions}
+      />
       <UpdaterDialog />
 
       <div className="flex-1 flex overflow-hidden">
