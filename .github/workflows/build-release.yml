@@ -13,8 +13,11 @@ permissions:
 jobs:
   build-and-release:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     env:
+      RELEASE_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN != '' && secrets.RELEASE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.TAURI_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.TAURI_KEY_PASSWORD }}
 
@@ -42,10 +45,14 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
-      - name: Validate updater signing secrets
+      - name: Validate release and updater secrets
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_TOKEN)) {
+            throw 'Missing release token. Provide RELEASE_GITHUB_TOKEN or enable write permissions for GITHUB_TOKEN.'
+          }
 
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw 'Missing updater signing private key. Set either TAURI_SIGNING_PRIVATE_KEY or TAURI_PRIVATE_KEY in repository secrets.'
@@ -153,7 +160,7 @@ jobs:
         id: tauri
         uses: tauri-apps/tauri-action@v0.6.2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Hellcall Desktop ${{ github.ref_name }}
@@ -201,6 +208,10 @@ jobs:
   publish-updater-json:
     needs: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
