@@ -17,6 +17,8 @@ const getStoredModelId = (storageKey: string, fallback: string) => {
 interface EngineState {
   status: EngineStatus;
   setStatus: (status: EngineStatus) => void;
+  lastStartedConfigSignature: string | null;
+  setLastStartedConfigSignature: (signature: string | null) => void;
   selectedDevice: string | null;
   setSelectedDevice: (device: string | null) => void;
   selectedVoskModelId: string;
@@ -32,6 +34,9 @@ interface EngineState {
 export const useEngineStore = create<EngineState>((set) => ({
   status: "OFFLINE",
   setStatus: (status) => set({ status }),
+  lastStartedConfigSignature: null,
+  setLastStartedConfigSignature: (signature) =>
+    set({ lastStartedConfigSignature: signature }),
   selectedDevice: null,
   setSelectedDevice: (device) => set({ selectedDevice: device }),
   selectedVoskModelId: getStoredModelId(

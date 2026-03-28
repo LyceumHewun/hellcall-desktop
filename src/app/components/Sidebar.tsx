@@ -3,7 +3,10 @@ import { Settings, Keyboard, Command, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
 import { useEngineStore } from "../../store/engineStore";
-import { AppConfig } from "../../types/config";
+import {
+  buildEngineStartSnapshot,
+  createEngineStartSignature,
+} from "../../store/engineConfig";
 import { useTranslation } from "react-i18next";
 
 interface SidebarProps {
@@ -13,9 +16,12 @@ interface SidebarProps {
 
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   const { t } = useTranslation();
+  const config = useConfigStore((state) => state.config);
   const {
     status,
     setStatus,
+    lastStartedConfigSignature,
+    setLastStartedConfigSignature,
     selectedDevice,
     selectedVoskModelId,
     selectedVoskModelReady,
@@ -23,6 +29,17 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
     selectedVisionModelId,
     setSelectedVisionModelReady,
   } = useEngineStore();
+
+  const currentEngineConfigSignature = config
+    ? createEngineStartSignature(
+        buildEngineStartSnapshot(
+          config,
+          selectedDevice,
+          selectedVoskModelId,
+          selectedVisionModelId,
+        ),
+      )
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -91,25 +108,22 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
       try {
         if (!state.config) throw new Error("Config not loaded");
 
-        const sanitizedConfig = JSON.parse(
-          JSON.stringify(state.config),
-        ) as AppConfig;
-        sanitizedConfig.commands = sanitizedConfig.commands
-          .filter((cmd) => cmd.command.trim() !== "" && cmd.keys.length > 0)
-          .map((cmd: any) => {
-            if (cmd.grammar && cmd.grammar.trim() === "") {
-              cmd.grammar = null;
-            }
-            delete cmd._frontendId;
-            return cmd;
-          });
+        const engineStartSnapshot = buildEngineStartSnapshot(
+          state.config,
+          selectedDevice,
+          selectedVoskModelId,
+          selectedVisionModelId,
+        );
 
         await invoke("start_engine", {
-          config: sanitizedConfig,
-          deviceName: selectedDevice,
-          selectedModelId: selectedVoskModelId,
-          selectedVisionModelId,
+          config: engineStartSnapshot.config,
+          deviceName: engineStartSnapshot.selectedDevice,
+          selectedModelId: engineStartSnapshot.selectedVoskModelId,
+          selectedVisionModelId: engineStartSnapshot.selectedVisionModelId,
         });
+        setLastStartedConfigSignature(
+          createEngineStartSignature(engineStartSnapshot),
+        );
         setStatus("ACTIVE");
       } catch (error) {
         console.error("Failed to start engine:", error);
@@ -129,6 +143,11 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   const isStarting = status === "STARTING";
   const isStartDisabled =
     isStarting || (!isActive && selectedVoskModelReady === false);
+  const showRestartReminder =
+    isActive &&
+    currentEngineConfigSignature !== null &&
+    lastStartedConfigSignature !== null &&
+    currentEngineConfigSignature !== lastStartedConfigSignature;
 
   return (
     <div className="w-64 bg-[#0F1115] border-r border-white/10 flex flex-col p-4 gap-6">
@@ -234,11 +253,19 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         </button>
       </nav>
 
-      {selectedVoskModelReady === false && !isActive ? (
-        <p className="mt-auto px-1 text-xs text-amber-300/80">
-          {t("settings.model_required")}
-        </p>
-      ) : null}
+      <div className="mt-auto flex flex-col gap-2">
+        {showRestartReminder ? (
+          <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+            {t("status.restart_required")}
+          </div>
+        ) : null}
+
+        {selectedVoskModelReady === false && !isActive ? (
+          <p className="px-1 text-xs text-amber-300/80">
+            {t("settings.model_required")}
+          </p>
+        ) : null}
+      </div>
 
       <style>{`
         @keyframes pulse {

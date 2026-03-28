@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { AppConfig } from "../types/config";
+import { sanitizeConfigForEngine } from "./engineConfig";
 
 interface ConfigState {
   config: AppConfig | null;
@@ -50,20 +51,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
       saveTimeout = setTimeout(async () => {
         try {
-          const sanitizedConfig = JSON.parse(
-            JSON.stringify(newConfig),
-          ) as AppConfig;
-          sanitizedConfig.commands = sanitizedConfig.commands
-            .filter((cmd) => cmd.command.trim() !== "" && cmd.keys.length > 0)
-            .map((cmd) => {
-              if (cmd.grammar && cmd.grammar.trim() === "") {
-                cmd.grammar = null;
-              }
-              // Strip _frontendId before sending to Rust backend
-              delete cmd._frontendId;
-              return cmd;
-            });
-
+          const sanitizedConfig = sanitizeConfigForEngine(newConfig);
           await invoke("save_config", { newConfig: sanitizedConfig });
           console.log("Config saved successfully");
         } catch (error) {

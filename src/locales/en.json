@@ -9,7 +9,8 @@
     "voice_link": "VOICE LINK",
     "offline": "OFFLINE",
     "linking": "LINKING...",
-    "active": "LINK ACTIVE"
+    "active": "LINK ACTIVE",
+    "restart_required": "Configuration changed. Restart Voice Link for the new settings to take effect."
   },
   "macros": {
     "title": "VOICE COMMAND ARSENAL",
