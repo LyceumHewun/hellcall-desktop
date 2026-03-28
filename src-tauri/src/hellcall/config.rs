@@ -111,7 +111,6 @@ impl Default for Config {
                 (LocalKey::RIGHT, Input::Key(rdev::Key::KeyD)),
                 (LocalKey::OPEN, Input::Key(rdev::Key::ControlLeft)),
                 (LocalKey::THROW, Input::Button(rdev::Button::Left)),
-                (LocalKey::RESEND, Input::Key(rdev::Key::BackQuote)),
             ]),
             trigger: TriggerConfig::default(),
             commands: Vec::new(),
@@ -169,9 +168,14 @@ fn merge_toml_values(base: &mut Value, old: &Value) {
     match (base, old) {
         (Value::Table(base_table), Value::Table(old_table)) => {
             for (key, old_value) in old_table {
-                if let Some(base_value) = base_table.get_mut(key) {
-                    merge_toml_values(base_value, old_value);
-                }
+                match base_table.get_mut(key) {
+                    Some(base_value) => merge_toml_values(base_value, old_value),
+                    None => {
+                        // Keep extra table entries from older configs so map-like sections such as
+                        // `key_map` do not lose optional user-defined bindings during upgrades.
+                        base_table.insert(key.clone(), old_value.clone());
+                    }
+                };
             }
         }
         (Value::Array(base_array), Value::Array(old_array)) => {
