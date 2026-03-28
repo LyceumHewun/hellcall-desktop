@@ -287,7 +287,7 @@ impl HellcallEngine {
                             })
                             .collect();
 
-                        push_fn(keys);
+                        push_fn(keys, true);
                     });
                 });
             }

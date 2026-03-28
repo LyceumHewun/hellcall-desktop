@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use log::{debug, info, trace};
+use log::{info, trace};
 use rdev::{simulate, Button, EventType, Key};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -64,7 +64,7 @@ pub struct KeyPresser {
     shortcut: Arc<RwLock<HashMap<Input, Vec<LocalKey>>>>,
     one_stack: Arc<Mutex<Option<Vec<LocalKey>>>>,
     spare_stack: Arc<Mutex<Option<Vec<LocalKey>>>>,
-    tx: Option<mpsc::Sender<Vec<LocalKey>>>,
+    tx: Option<mpsc::Sender<(Vec<LocalKey>, bool)>>,
     worker_handle: Option<JoinHandle<()>>,
     /// 当前正在模拟按键的数量，用于 listen 回调过滤注入事件
     simulating: Arc<AtomicUsize>,
@@ -72,7 +72,11 @@ pub struct KeyPresser {
         Mutex<
             HashMap<
                 Input,
-                Box<dyn FnMut(bool, Box<dyn Fn(Vec<LocalKey>) + Send + 'static>) + Send + 'static>,
+                Box<
+                    dyn FnMut(bool, Box<dyn Fn(Vec<LocalKey>, bool) + Send + 'static>)
+                        + Send
+                        + 'static,
+                >,
             >,
         >,
     >,
@@ -117,7 +121,7 @@ impl KeyPresser {
         Self::check_key_map(&key_map)?;
 
         // keypress worker
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<LocalKey>>();
+        let (tx, rx) = std::sync::mpsc::channel::<(Vec<LocalKey>, bool)>();
         let config = Arc::new(RwLock::new(config));
         let key_map = Arc::new(RwLock::new(key_map));
         let simulating = Arc::new(AtomicUsize::new(0));
@@ -133,8 +137,8 @@ impl KeyPresser {
                     }
                 };
 
-                while let Ok(keys) = rx.recv() {
-                    info!("key pressed: {:?}", keys);
+                while let Ok((keys, fast)) = rx.recv() {
+                    info!("key pressed: {:?}, fast: {}", keys, fast);
 
                     simulating.fetch_add(1, Ordering::Relaxed);
 
@@ -171,16 +175,15 @@ impl KeyPresser {
 
                     // simulating
                     let mut open_release_event: Option<EventType> = None;
-                    let mut is_waited_open = false;
+                    let mut is_waited_open = fast;
                     for (key, press_event_type, release_event_type) in &key_event_map {
                         if key == &LocalKey::OPEN {
                             sim(press_event_type);
                             trace!("simulated press [OPEN] event: {:?}", press_event_type);
                             open_release_event = Some(release_event_type.clone());
+                            is_waited_open = false;
                             continue;
-                        }
-
-                        if !is_waited_open {
+                        } else if !is_waited_open {
                             std::thread::sleep(Duration::from_millis(wait_open_time));
                             is_waited_open = true;
                         }
@@ -222,7 +225,7 @@ impl KeyPresser {
         if let Some(first_key) = keys.first() {
             if first_key == &LocalKey::OPEN {
                 if let Some(tx) = &self.tx {
-                    if let Err(e) = tx.send(keys.clone()) {
+                    if let Err(e) = tx.send((keys.clone(), false)) {
                         log::error!("push send error: {:?}", e);
                     }
                 }
@@ -239,7 +242,7 @@ impl KeyPresser {
     /// `callback` 的参数为 `true` 表示按下，`false` 表示释放。
     pub fn listen_key<F>(&self, key: Input, callback: F)
     where
-        F: FnMut(bool, Box<dyn Fn(Vec<LocalKey>) + Send + 'static>) + Send + 'static,
+        F: FnMut(bool, Box<dyn Fn(Vec<LocalKey>, bool) + Send + 'static>) + Send + 'static,
     {
         self.listen_key_map
             .lock()
@@ -278,9 +281,9 @@ impl KeyPresser {
                     if let Ok(mut listeners) = listen_key_map.try_lock() {
                         if let Some(callback) = listeners.get_mut(&target_input) {
                             let tx_clone = tx.clone();
-                            let fn_push: Box<dyn Fn(Vec<LocalKey>) + Send + 'static> =
-                                Box::new(move |keys| {
-                                    let _ = tx_clone.send(keys);
+                            let fn_push: Box<dyn Fn(Vec<LocalKey>, bool) + Send + 'static> =
+                                Box::new(move |keys, fast| {
+                                    let _ = tx_clone.send((keys, fast));
                                 });
 
                             callback(is_press, fn_push);
@@ -317,7 +320,7 @@ impl KeyPresser {
                 // 使用 try_lock 非阻塞：若锁被占用则跳过，绝不阻塞系统钩子
                 if let Ok(mut guard) = one_stack.try_lock() {
                     if let Some(keys) = guard.take() {
-                        if let Err(e) = tx.send(keys) {
+                        if let Err(e) = tx.send((keys, false)) {
                             log::error!("listen send error: {:?}", e);
                         }
                     }
@@ -337,7 +340,7 @@ impl KeyPresser {
                 };
                 if let Some(keys) = sc.get(&input).cloned() {
                     drop(sc);
-                    if let Err(e) = tx.send(keys) {
+                    if let Err(e) = tx.send((keys, true)) {
                         log::error!("shortcut send error: {:?}", e);
                     }
                 }
