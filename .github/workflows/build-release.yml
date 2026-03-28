@@ -71,7 +71,7 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Download Vosk DLLs
+      - name: Download Vosk runtime and import library
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -105,15 +105,35 @@ jobs:
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
 
-          $dlls = Get-ChildItem -Path $extractPath -Recurse -File |
-            Where-Object { $_.Extension -eq '.dll' }
+          Get-ChildItem -Path $targetDir -Force -File |
+            Where-Object { $_.Name -ne '.gitkeep' } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
 
-          if (-not $dlls) {
-            throw 'Could not find any DLL files after extracting the Vosk archive.'
+          $voskRoot = Get-ChildItem -Path $extractPath -Recurse -Directory |
+            Where-Object {
+              (Test-Path (Join-Path $_.FullName 'libvosk.dll')) -and
+              (Test-Path (Join-Path $_.FullName 'libvosk.lib'))
+            } |
+            Select-Object -First 1
+
+          if (-not $voskRoot) {
+            throw 'Could not find the extracted Vosk library directory containing both libvosk.dll and libvosk.lib.'
           }
 
-          foreach ($dll in $dlls) {
-            Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $targetDir $dll.Name) -Force
+          $voskFiles = Get-ChildItem -Path $voskRoot.FullName -File |
+            Where-Object {
+              $_.Name -in @(
+                'libvosk.dll',
+                'libvosk.lib',
+                'libgcc_s_seh-1.dll',
+                'libstdc++-6.dll',
+                'libwinpthread-1.dll',
+                'vosk_api.h'
+              )
+            }
+
+          foreach ($file in $voskFiles) {
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $targetDir $file.Name) -Force
           }
 
       - name: Build and publish Tauri app
