@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use image::imageops::{self, FilterType};
 use image::{RgbImage, RgbaImage};
+use log::warn;
 use windows_capture::{
     capture::{Context as CaptureContext, GraphicsCaptureApiHandler},
     frame::Frame,
-    graphics_capture_api::InternalCaptureControl,
+    graphics_capture_api::{GraphicsCaptureApi, InternalCaptureControl},
     monitor::Monitor,
     settings::{
         ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
@@ -74,10 +75,21 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
 /// 从主显示器捕获一帧，根据 capture_ratio 裁剪中心区域正方形，缩放到 640×640，返回 RgbImage。
 pub fn capture_frame(capture_ratio: f32) -> Result<RgbImage> {
     let monitor = Monitor::primary().context("Failed to get primary monitor")?;
+    let draw_border_settings = if GraphicsCaptureApi::is_border_settings_supported()
+        .context("Failed to determine capture border support")?
+    {
+        DrawBorderSettings::WithoutBorder
+    } else {
+        warn!(
+            "Capture border toggle is not supported on this system; falling back to default border behavior"
+        );
+        DrawBorderSettings::Default
+    };
+
     let settings = Settings::new(
         monitor,
         CursorCaptureSettings::WithoutCursor,
-        DrawBorderSettings::WithoutBorder,
+        draw_border_settings,
         SecondaryWindowSettings::Default,
         MinimumUpdateIntervalSettings::Default,
         DirtyRegionSettings::Default,
