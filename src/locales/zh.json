@@ -25,7 +25,10 @@
       "grammar": "引擎语法",
       "shortcut": "备用快捷键",
       "audio": "响应音频",
-      "audio_placeholder": "输入文件名并按回车"
+      "audio_placeholder": "搜索并选择本地音频",
+      "audio_loading": "正在加载音频文件...",
+      "audio_empty": "未找到本地音频文件",
+      "audio_all_selected": "没有更多可选音频"
     }
   },
   "bindings": {
@@ -64,6 +67,9 @@
     "start_test": "开始测试",
     "mic_test_disabled": "Voice Link 引擎运行时禁用麦克风测试",
     "speaker": "Speaker",
+    "audio_directory": "音频文件目录",
+    "audio_directory_loading": "正在加载音频目录...",
+    "audio_directory_open": "打开目录",
     "speaker_volume": "播报音量 ({{val}}x)",
     "speaker_speed": "播报语速 ({{val}}x)",
     "speaker_wait_end": "等待当前音频播放结束",

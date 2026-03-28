@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { Mic } from "lucide-react";
 import {
   Card,
@@ -34,6 +35,7 @@ export function GlobalSettingsView() {
   const isEngineRunning = status === "STARTING" || status === "ACTIVE";
 
   const [devices, setDevices] = useState<string[]>([]);
+  const [audioDirectory, setAudioDirectory] = useState("");
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micVolume, setMicVolume] = useState(0);
 
@@ -46,8 +48,18 @@ export function GlobalSettingsView() {
     }
   };
 
+  const fetchAudioDirectory = async () => {
+    try {
+      const dir = await invoke<string>("get_audio_directory");
+      setAudioDirectory(dir);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchDevices();
+    fetchAudioDirectory();
   }, []);
 
   useEffect(() => {
@@ -88,6 +100,16 @@ export function GlobalSettingsView() {
         deviceName: selectedDevice,
       });
       setIsTestingMic(true);
+    }
+  };
+
+  const handleOpenAudioDirectory = async () => {
+    if (!audioDirectory) return;
+
+    try {
+      await openPath(audioDirectory);
+    } catch (error) {
+      console.error("Failed to open audio directory", error);
     }
   };
 
@@ -445,6 +467,27 @@ export function GlobalSettingsView() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>{t("settings.audio_directory")}</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    className="bg-black/30 border-white/10 text-white/70 font-mono"
+                    value={
+                      audioDirectory || t("settings.audio_directory_loading")
+                    }
+                    readOnly
+                  />
+                  <Button
+                    variant="outline"
+                    className="cursor-pointer border-white/10 bg-black/30 text-white/80 hover:bg-white/10 hover:text-white"
+                    onClick={handleOpenAudioDirectory}
+                    disabled={!audioDirectory}
+                  >
+                    {t("settings.audio_directory_open")}
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <Label>
                   {t("settings.speaker_volume", {

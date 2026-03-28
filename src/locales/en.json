@@ -25,7 +25,10 @@
       "grammar": "Engine Grammar",
       "shortcut": "Fallback Shortcut",
       "audio": "Response Audio",
-      "audio_placeholder": "Type filename and press Enter"
+      "audio_placeholder": "Search and select local audio",
+      "audio_loading": "Loading audio files...",
+      "audio_empty": "No local audio files found.",
+      "audio_all_selected": "No more audio files"
     }
   },
   "bindings": {
@@ -64,6 +67,9 @@
     "start_test": "Start Test",
     "mic_test_disabled": "Microphone testing is disabled while Voice Link is active",
     "speaker": "Speaker",
+    "audio_directory": "Audio File Directory",
+    "audio_directory_loading": "Loading audio directory...",
+    "audio_directory_open": "Open Folder",
     "speaker_volume": "Playback Volume ({{val}}x)",
     "speaker_speed": "Playback Speed ({{val}}x)",
     "speaker_wait_end": "Wait for current audio to finish",

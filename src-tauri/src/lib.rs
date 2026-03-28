@@ -4,6 +4,7 @@ mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
+use std::fs;
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
@@ -22,6 +23,35 @@ unsafe impl Sync for UnsafeStreamWrapper {}
 struct AppState {
     engine: Mutex<AppEngine>,
     mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
+}
+
+fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let mut candidates = Vec::new();
+
+    match app_handle.path().resolve("audio/", BaseDirectory::Resource) {
+        Ok(path) => candidates.push(path),
+        Err(error) => {
+            log::warn!("Failed to resolve bundled audio path: {}", error);
+        }
+    }
+
+    let current_dir = std::env::current_dir()
+        .map_err(|e| utils::format_and_log_error("Failed to get current directory", e))?;
+    candidates.push(current_dir.join("audio"));
+    if let Some(parent_dir) = current_dir.parent() {
+        candidates.push(parent_dir.join("audio"));
+    }
+
+    for candidate in candidates {
+        if candidate.is_dir() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(
+        "Audio directory not found. Expected bundled resources or a local ./audio folder."
+            .to_string(),
+    )
 }
 
 #[tauri::command]
@@ -81,10 +111,7 @@ fn start_engine(
     )?;
     let vision_model_path = vision_model_path.map(|path| utils::normalize_runtime_path(&path));
 
-    let audio_path = app_handle
-        .path()
-        .resolve("audio/", BaseDirectory::Resource)
-        .map_err(|e| utils::format_and_log_error("Failed to resolve audio path", e))?;
+    let audio_path = resolve_audio_dir(&app_handle)?;
     let audio_path = utils::normalize_runtime_path(&audio_path);
 
     let state_taken = std::mem::replace(&mut *engine_guard, AppEngine::None);
@@ -172,6 +199,62 @@ fn get_audio_devices() -> Result<Vec<String>, String> {
         }
     }
     Ok(names)
+}
+
+#[tauri::command]
+fn get_audio_files(app_handle: AppHandle) -> Result<Vec<String>, String> {
+    fn collect_audio_files(
+        current_dir: &std::path::Path,
+        base_dir: &std::path::Path,
+        files: &mut Vec<String>,
+    ) -> Result<(), String> {
+        let entries = fs::read_dir(current_dir)
+            .map_err(|e| utils::format_and_log_error("Failed to read audio directory", e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| {
+                utils::format_and_log_error("Failed to read audio directory entry", e)
+            })?;
+            let path = entry.path();
+            log::debug!("Found audio path: {}", path.display());
+
+            if path.is_dir() {
+                collect_audio_files(&path, base_dir, files)?;
+                continue;
+            }
+
+            let Some(extension) = path.extension().and_then(|ext| ext.to_str()) else {
+                continue;
+            };
+
+            let extension = extension.to_ascii_lowercase();
+            if !["wav", "mp3", "ogg", "flac", "m4a"].contains(&extension.as_str()) {
+                continue;
+            }
+
+            let relative_path = path
+                .strip_prefix(base_dir)
+                .map_err(|e| utils::format_and_log_error("Failed to resolve audio file path", e))?;
+            files.push(relative_path.to_string_lossy().replace('\\', "/"));
+        }
+
+        Ok(())
+    }
+
+    let audio_path = resolve_audio_dir(&app_handle)?;
+
+    let mut files = Vec::new();
+    collect_audio_files(&audio_path, &audio_path, &mut files)?;
+    files.sort();
+    log::debug!("Collected audio files: {:?}", files);
+
+    Ok(files)
+}
+
+#[tauri::command]
+fn get_audio_directory(app_handle: AppHandle) -> Result<String, String> {
+    let audio_path = resolve_audio_dir(&app_handle)?;
+    Ok(utils::normalize_runtime_path(&audio_path))
 }
 
 #[tauri::command]
@@ -296,6 +379,8 @@ pub fn run() {
             download_vosk_model,
             download_vision_model,
             get_audio_devices,
+            get_audio_files,
+            get_audio_directory,
             start_mic_test,
             stop_mic_test,
             load_config,

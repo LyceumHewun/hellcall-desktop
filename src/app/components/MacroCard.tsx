@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { KeySequence } from "./KeySequence";
 import { mapWebEventToRustInput, KeyRecorder } from "./KeyRecorder";
 import {
@@ -7,9 +8,18 @@ import {
   Keyboard,
   ChevronDown,
   ChevronUp,
+  Check,
   X,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "./ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { CommandConfig } from "../../types/config";
 import { useConfigStore } from "../../store/configStore";
 import { useSortable } from "@dnd-kit/sortable";
@@ -34,6 +44,10 @@ export function MacroCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+  const [audioFiles, setAudioFiles] = useState<string[]>([]);
+  const [hasLoadedAudioFiles, setHasLoadedAudioFiles] = useState(false);
+  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
+  const [isLoadingAudioFiles, setIsLoadingAudioFiles] = useState(false);
 
   const {
     attributes,
@@ -151,24 +165,79 @@ export function MacroCard({
       });
     };
   }, [isRecording, commandIndex, updateConfig]);
+
+  useEffect(() => {
+    if (!isExpanded || hasLoadedAudioFiles || isLoadingAudioFiles) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAudioFiles = async () => {
+      setIsLoadingAudioFiles(true);
+
+      try {
+        const files = await invoke<string[]>("get_audio_files");
+        if (!cancelled) {
+          setAudioFiles(files);
+          setHasLoadedAudioFiles(true);
+        }
+      } catch (error) {
+        console.error("Failed to load audio files", error);
+        if (!cancelled) {
+          setHasLoadedAudioFiles(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingAudioFiles(false);
+        }
+      }
+    };
+
+    loadAudioFiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasLoadedAudioFiles, isExpanded]);
+
   const removeAudio = (indexToRemove: number) => {
     updateConfig((draft) => {
       draft.commands[commandIndex].audio_files.splice(indexToRemove, 1);
     });
   };
 
-  const handleAddAudio = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const val = e.currentTarget.value.trim();
-      if (val && !command.audio_files.includes(val)) {
-        updateConfig((draft) => {
-          draft.commands[commandIndex].audio_files.push(val);
-        });
-        e.currentTarget.value = "";
-      }
+  const handleAddAudio = (audioFile: string) => {
+    if (command.audio_files.includes(audioFile)) {
+      setAudioPickerOpen(false);
+      return;
     }
+
+    updateConfig((draft) => {
+      draft.commands[commandIndex].audio_files.push(audioFile);
+    });
+    setAudioPickerOpen(false);
   };
+
+  const hasAnyAudioFiles = audioFiles.length > 0;
+
+  const audioPickerPlaceholder = isLoadingAudioFiles
+    ? `${t("macros.card.audio_placeholder")}...`
+    : t("macros.card.audio_placeholder");
+
+  const audioPickerEmptyText = isLoadingAudioFiles
+    ? t("macros.card.audio_loading")
+    : t("macros.card.audio_empty");
+
+  const audioPickerTriggerText =
+    !hasLoadedAudioFiles || isLoadingAudioFiles
+      ? t("macros.card.audio_loading")
+      : hasAnyAudioFiles
+        ? t("macros.card.audio_placeholder")
+        : t("macros.card.audio_empty");
+
+  const isAudioPickerDisabled =
+    isLoadingAudioFiles || (hasLoadedAudioFiles && !hasAnyAudioFiles);
 
   const isUnsaved = command.command.trim() === "" || command.keys.length === 0;
 
@@ -336,12 +405,57 @@ export function MacroCard({
                     </button>
                   </Badge>
                 ))}
-                <input
-                  type="text"
-                  onKeyDown={handleAddAudio}
-                  className="flex-1 bg-transparent text-white text-sm placeholder:text-white/30 focus:outline-none min-w-[120px]"
-                  placeholder={t("macros.card.audio_placeholder")}
-                />
+                <Popover
+                  open={audioPickerOpen}
+                  onOpenChange={setAudioPickerOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isAudioPickerDisabled}
+                      className={`flex-1 min-w-[180px] rounded border px-2.5 py-1.5 text-left text-sm transition-colors focus:outline-none ${
+                        isAudioPickerDisabled
+                          ? "cursor-not-allowed border-white/5 bg-white/5 text-white/25"
+                          : "border-white/10 bg-white/5 text-white/70 hover:border-[#FCE100]/40 hover:text-white"
+                      }`}
+                    >
+                      {audioPickerTriggerText}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-[320px] border-white/10 bg-[#1E2128] p-0 text-white"
+                  >
+                    <Command className="bg-transparent text-white">
+                      <CommandInput
+                        placeholder={audioPickerPlaceholder}
+                        className="text-white placeholder:text-white/30"
+                      />
+                      <CommandList>
+                        <CommandEmpty>{audioPickerEmptyText}</CommandEmpty>
+                        {audioFiles.map((audioFile) => {
+                          const isSelected =
+                            command.audio_files.includes(audioFile);
+
+                          return (
+                            <CommandItem
+                              key={audioFile}
+                              value={audioFile}
+                              disabled={isSelected}
+                              onSelect={() => handleAddAudio(audioFile)}
+                              className="text-white hover:bg-white/10 disabled:opacity-50"
+                            >
+                              <Check
+                                className={`w-4 h-4 ${isSelected ? "opacity-100" : "opacity-0"}`}
+                              />
+                              <span className="truncate">{audioFile}</span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
