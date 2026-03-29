@@ -1,9 +1,11 @@
 mod asset_manager;
 mod hellcall;
+mod stratagems;
 mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
+use stratagems::StratagemCatalog;
 use std::fs;
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
@@ -164,6 +166,16 @@ fn load_config(app: AppHandle) -> Result<Config, String> {
         .map_err(|e| e.to_string())?
         .join("config.toml");
     load_config_from_path(&config_path)
+}
+
+#[tauri::command]
+fn load_stratagems(app: AppHandle) -> Result<StratagemCatalog, String> {
+    stratagems::load_catalog(&app)
+}
+
+#[tauri::command]
+async fn refresh_stratagems(app: AppHandle) -> Result<StratagemCatalog, String> {
+    stratagems::refresh_catalog(&app).await
 }
 
 #[tauri::command]
@@ -384,6 +396,8 @@ pub fn run() {
             start_mic_test,
             stop_mic_test,
             load_config,
+            load_stratagems,
+            refresh_stratagems,
             save_config,
             start_engine,
             stop_engine
