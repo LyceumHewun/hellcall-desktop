@@ -5,6 +5,7 @@ mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
+use hellcall::core::microphone::open_volume_meter_stream;
 use std::collections::HashMap;
 use stratagems::StratagemCatalog;
 use std::fs;
@@ -322,78 +323,20 @@ fn get_audio_directory(app_handle: AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn start_mic_test(
     device_name: Option<String>,
+    microphone_config: hellcall::config::MicrophoneConfig,
     app_handle: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use tauri::Emitter;
 
-    let host = cpal::default_host();
-    let device = if let Some(name) = device_name {
-        host.input_devices()
-            .map_err(|e| e.to_string())?
-            .find(|d| d.name().unwrap_or_default() == name)
-            .ok_or_else(|| "Device not found".to_string())?
-    } else {
-        host.default_input_device()
-            .ok_or_else(|| "No default device".to_string())?
-    };
-
-    let config = device.default_input_config().map_err(|e| e.to_string())?;
-
-    let sample_format = config.sample_format();
-    let config: cpal::StreamConfig = config.into();
-
-    let last_emit = std::sync::Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
-
-    let err_fn = |err| log::error!("an error occurred on stream: {}", err);
-
-    let stream = match sample_format {
-        cpal::SampleFormat::F32 => {
-            let last_emit = last_emit.clone();
-            device.build_input_stream(
-                &config,
-                move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    let mut le = last_emit.lock().unwrap();
-                    if le.elapsed() >= std::time::Duration::from_millis(60) {
-                        let sum_squares: f32 = data.iter().map(|&s| s * s).sum();
-                        let rms = (sum_squares / data.len() as f32).sqrt();
-                        let _ = app_handle.emit("mic_volume", rms);
-                        *le = std::time::Instant::now();
-                    }
-                },
-                err_fn,
-                None,
-            )
-        }
-        cpal::SampleFormat::I16 => {
-            let last_emit = last_emit.clone();
-            device.build_input_stream(
-                &config,
-                move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    let mut le = last_emit.lock().unwrap();
-                    if le.elapsed() >= std::time::Duration::from_millis(60) {
-                        let sum_squares: f32 = data
-                            .iter()
-                            .map(|&s| {
-                                let f = s as f32 / i16::MAX as f32;
-                                f * f
-                            })
-                            .sum();
-                        let rms = (sum_squares / data.len() as f32).sqrt();
-                        let _ = app_handle.emit("mic_volume", rms);
-                        *le = std::time::Instant::now();
-                    }
-                },
-                err_fn,
-                None,
-            )
-        }
-        _ => return Err("Unsupported sample format".to_string()),
-    }
-    .map_err(|e| e.to_string())?;
-
-    stream.play().map_err(|e| e.to_string())?;
+    let stream = open_volume_meter_stream(
+        device_name,
+        microphone_config.enable_denoise,
+        move |rms| {
+        let _ = app_handle.emit("mic_volume", rms);
+        },
+    )
+    .map_err(|e| utils::format_and_log_error("Failed to start mic test", e))?;
 
     let mut stream_guard = state.mic_test_stream.lock().map_err(|e| e.to_string())?;
     *stream_guard = Some(UnsafeStreamWrapper(stream));

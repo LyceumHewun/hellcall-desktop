@@ -103,12 +103,15 @@ export function GlobalSettingsView() {
   }, [isEngineRunning, isTestingMic]);
 
   const toggleMicTest = async () => {
+    if (!config) return;
+
     if (isTestingMic) {
       await invoke("stop_mic_test");
       setIsTestingMic(false);
     } else {
       await invoke("start_mic_test", {
         deviceName: selectedDevice,
+        microphoneConfig: config.microphone,
       });
       setIsTestingMic(true);
     }
@@ -165,7 +168,16 @@ export function GlobalSettingsView() {
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
 
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.microphone")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label>{t("settings.input_device")}</Label>
@@ -226,6 +238,24 @@ export function GlobalSettingsView() {
                   </Button>
                 </div>
               </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.enable_denoise")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.enable_denoise_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.microphone.enable_denoise}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.microphone.enable_denoise = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -276,24 +306,6 @@ export function GlobalSettingsView() {
                     })
                   }
                 />
-              </div>
-
-              <div className="space-y-3">
-                <Label>{t("settings.enable_denoise")}</Label>
-                <div className="flex items-center justify-between space-x-4">
-                  <p className="text-sm text-white/50">
-                    {t("settings.enable_denoise_desc")}
-                  </p>
-                  <Switch
-                    className="border cursor-pointer"
-                    checked={config.recognizer.enable_denoise}
-                    onCheckedChange={(checked) =>
-                      updateConfig((c) => {
-                        c.recognizer.enable_denoise = checked;
-                      })
-                    }
-                  />
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -635,6 +647,7 @@ export function GlobalSettingsView() {
                   min={0}
                   max={3}
                   step={0.05}
+                  disabled={!config.speaker.virtual_mic_enabled}
                   onValueChange={([val]) =>
                     updateConfig((c) => {
                       c.speaker.virtual_mic_input_volume = val;

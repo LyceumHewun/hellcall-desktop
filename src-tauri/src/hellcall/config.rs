@@ -42,6 +42,10 @@ fn default_virtual_mic_input_volume() -> f32 {
     1.0
 }
 
+fn default_microphone_enable_denoise() -> bool {
+    false
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VisionConfig {
     #[serde(default)]
@@ -66,6 +70,8 @@ impl Default for VisionConfig {
 pub struct Config {
     #[serde(default)]
     pub vision: VisionConfig,
+    #[serde(default)]
+    pub microphone: MicrophoneConfig,
     #[serde(default)]
     pub speaker: SpeakerConfig,
     pub recognizer: RecognizerConfig,
@@ -111,14 +117,18 @@ pub struct SpeakerConfig {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(default)]
+pub struct MicrophoneConfig {
+    #[serde(default = "default_microphone_enable_denoise")]
+    pub enable_denoise: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct RecognizerConfig {
     /// 音频识别的时间段 (秒)
     pub chunk_time: f32,
     /// 判断语音结束后的静音持续时间 (毫秒)
     pub vad_silence_duration: u64,
-    /// 是否开启降噪
-    #[serde(default)]
-    pub enable_denoise: bool,
     /// 语音识别的模式
     #[serde(default)]
     pub talk_mode: TalkMode,
@@ -154,6 +164,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             vision: VisionConfig::default(),
+            microphone: MicrophoneConfig::default(),
             speaker: SpeakerConfig::default(),
             recognizer: RecognizerConfig::default(),
             key_presser: KeyPresserConfig::default(),
@@ -186,6 +197,14 @@ impl Default for SpeakerConfig {
     }
 }
 
+impl Default for MicrophoneConfig {
+    fn default() -> Self {
+        Self {
+            enable_denoise: false,
+        }
+    }
+}
+
 impl From<SpeakerConfig> for SpeakerRuntimeConfig {
     fn from(config: SpeakerConfig) -> Self {
         Self {
@@ -206,7 +225,6 @@ impl Default for RecognizerConfig {
         Self {
             chunk_time: 0.5,
             vad_silence_duration: 200,
-            enable_denoise: false,
             talk_mode: TalkMode::VoiceActivation,
         }
     }
@@ -239,7 +257,6 @@ impl Into<AudioRecognizerConfig> for RecognizerConfig {
             chunk_time: self.chunk_time,
             grammar: Vec::new(),
             vad_silence_duration: self.vad_silence_duration,
-            enable_denoise: self.enable_denoise,
             is_ptt: self.talk_mode == TalkMode::PushToTalk,
         }
     }
@@ -300,6 +317,7 @@ pub fn load_config_from_path(config_path: &Path) -> Result<Config, String> {
     match toml::from_str::<Value>(&file_content) {
         Ok(old_value) => {
             merge_toml_values(&mut base_value, &old_value);
+            migrate_legacy_microphone_config(&mut base_value, &old_value);
 
             let final_config = base_value.try_into().unwrap_or_else(|e| {
                 log::warn!(
@@ -323,5 +341,36 @@ pub fn load_config_from_path(config_path: &Path) -> Result<Config, String> {
             save_config_to_path(config_path, &default_config)?;
             Ok(default_config)
         }
+    }
+}
+
+fn migrate_legacy_microphone_config(base_value: &mut Value, old_value: &Value) {
+    let Some(old_denoise) = old_value
+        .get("recognizer")
+        .and_then(|recognizer| recognizer.get("enable_denoise"))
+        .and_then(Value::as_bool)
+    else {
+        return;
+    };
+
+    let Some(base_table) = base_value.as_table_mut() else {
+        return;
+    };
+
+    let microphone = base_table
+        .entry("microphone")
+        .or_insert_with(|| Value::Table(toml::map::Map::new()));
+    let Some(microphone_table) = microphone.as_table_mut() else {
+        return;
+    };
+
+    let should_migrate = microphone_table
+        .get("enable_denoise")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        == false;
+
+    if should_migrate {
+        microphone_table.insert("enable_denoise".to_string(), Value::Boolean(old_denoise));
     }
 }

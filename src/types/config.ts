@@ -3,8 +3,11 @@ export type TalkMode = "push_to_talk" | "voice_activation";
 export interface RecognizerConfig {
   chunk_time: number;
   vad_silence_duration: number;
-  enable_denoise: boolean;
   talk_mode: TalkMode;
+}
+
+export interface MicrophoneConfig {
+  enable_denoise: boolean;
 }
 
 export interface KeyPresserConfig {
@@ -45,6 +48,7 @@ export interface SpeakerConfig {
 
 export interface AppConfig {
   vision: VisionConfig;
+  microphone: MicrophoneConfig;
   speaker: SpeakerConfig;
   recognizer: RecognizerConfig;
   key_presser: KeyPresserConfig;
