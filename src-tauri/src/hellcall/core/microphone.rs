@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::traits::StreamTrait;
-use log::{debug, info};
+use log::debug;
+use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, OutputStreamBuilder, Sink};
 use std::collections::VecDeque;
 use std::sync::{mpsc::Receiver, Arc, Mutex, RwLock};
@@ -137,11 +138,13 @@ impl VirtualMicMixer {
         input_volume: f32,
         enable_denoise: bool,
     ) -> Result<Self> {
+        ensure_virtual_output_has_capture_pair(output_device_name)?;
+
         let device = find_output_device_by_name(output_device_name)
             .with_context(|| format!("virtual mic output device '{}' not found", output_device_name))?;
         let mut stream = OutputStreamBuilder::from_device(device)
             .context("open virtual mic output stream builder failed")?
-            .open_stream_or_fallback()
+            .open_stream()
             .context("open virtual mic output stream failed")?;
         stream.log_on_drop(false);
 
@@ -198,9 +201,7 @@ pub fn default_input_device_name() -> Result<String> {
     let device = host
         .default_input_device()
         .context("Failed to get default input device")?;
-    let input_device_name = device.name().context("Failed to get device name")?;
-    info!("default input device name: {}", &input_device_name);
-    Ok(input_device_name)
+    device.name().context("Failed to get device name")
 }
 
 pub fn open_input_stream(input_device_name: &str) -> Result<MicrophoneInputStream> {
@@ -346,6 +347,41 @@ pub fn open_volume_meter_stream(
     });
 
     Ok(stream)
+}
+
+pub fn validate_virtual_output_device_for_mix(
+    selected_input_name: Option<String>,
+    output_device_name: &str,
+    enable_denoise: bool,
+) -> Result<()> {
+    ensure_virtual_output_has_capture_pair(output_device_name)?;
+
+    let input_device_name = resolve_input_device_name(selected_input_name)?;
+    let microphone_input = open_input_stream(&input_device_name)
+        .context("failed to open physical microphone input stream for mix validation")?;
+    let mixer = VirtualMicMixer::new(
+        &input_device_name,
+        output_device_name,
+        0.0,
+        enable_denoise,
+    )
+    .context("failed to create virtual microphone mixer")?;
+
+    let validation_stream = microphone_input.stream;
+    let validation_rx = microphone_input.rx;
+    validation_stream
+        .play()
+        .context("failed to start physical microphone stream for validation")?;
+
+    let sink = mixer.create_sink();
+    sink.append(SamplesBuffer::new(1, 48_000, vec![0.0f32; 480]));
+    let _ = validation_rx.recv_timeout(Duration::from_millis(800)).context(
+        "no microphone frames arrived while validating the mix stream; check whether the selected input device is available",
+    )?;
+    drop(sink);
+    drop(validation_stream);
+    drop(mixer);
+    Ok(())
 }
 
 pub fn run_processed_audio_pipeline(
@@ -590,4 +626,45 @@ fn find_output_device_by_name(device_name: &str) -> Result<cpal::Device> {
             _ => None,
         })
         .context("failed to find output device")
+}
+
+fn ensure_virtual_output_has_capture_pair(output_device_name: &str) -> Result<()> {
+    let host = cpal::default_host();
+    let input_names = host
+        .input_devices()?
+        .filter_map(|device| device.name().ok())
+        .collect::<Vec<_>>();
+
+    if input_names
+        .iter()
+        .any(|input_name| device_names_match_for_virtual_route(output_device_name, input_name))
+    {
+        return Ok(());
+    }
+
+    Err(anyhow::anyhow!(
+        "the selected output device does not have a matching recording endpoint, so apps cannot receive it as a microphone"
+    ))
+}
+
+fn device_names_match_for_virtual_route(output_name: &str, input_name: &str) -> bool {
+    let output_name = output_name.trim();
+    let input_name = input_name.trim();
+    if output_name.eq_ignore_ascii_case(input_name) {
+        return true;
+    }
+
+    canonicalize_virtual_route_name(output_name) == canonicalize_virtual_route_name(input_name)
+}
+
+fn canonicalize_virtual_route_name(device_name: &str) -> String {
+    let mut normalized = device_name.trim().to_lowercase();
+    for token in [" input ", " output ", "input", "output"] {
+        normalized = normalized.replace(token, " ");
+    }
+
+    normalized
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }

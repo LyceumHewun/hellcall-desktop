@@ -5,7 +5,9 @@ mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
-use hellcall::core::microphone::open_volume_meter_stream;
+use hellcall::core::microphone::{
+    open_volume_meter_stream, validate_virtual_output_device_for_mix,
+};
 use std::collections::HashMap;
 use stratagems::StratagemCatalog;
 use std::fs;
@@ -265,6 +267,20 @@ fn get_output_audio_devices() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn validate_virtual_mic_output_device(
+    input_device_name: Option<String>,
+    output_device_name: String,
+    microphone_config: hellcall::config::MicrophoneConfig,
+) -> Result<(), String> {
+    validate_virtual_output_device_for_mix(
+        input_device_name,
+        &output_device_name,
+        microphone_config.enable_denoise,
+    )
+    .map_err(|e| utils::format_and_log_error("Virtual output device is not usable", e))
+}
+
+#[tauri::command]
 fn get_audio_files(app_handle: AppHandle) -> Result<Vec<String>, String> {
     fn collect_audio_files(
         current_dir: &std::path::Path,
@@ -386,6 +402,7 @@ pub fn run() {
             download_vision_model,
             get_audio_devices,
             get_output_audio_devices,
+            validate_virtual_mic_output_device,
             get_audio_files,
             get_audio_directory,
             start_mic_test,
