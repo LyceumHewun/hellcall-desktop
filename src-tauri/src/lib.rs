@@ -4,7 +4,9 @@ mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
+use std::collections::HashMap;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
@@ -23,6 +25,7 @@ unsafe impl Sync for UnsafeStreamWrapper {}
 struct AppState {
     engine: Mutex<AppEngine>,
     mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
+    cached_vosk_runtime_model_paths: Mutex<HashMap<String, PathBuf>>,
 }
 
 fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -52,6 +55,39 @@ fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, Strin
         "Audio directory not found. Expected bundled resources or a local ./audio folder."
             .to_string(),
     )
+}
+
+fn resolve_cached_vosk_runtime_model_path(
+    app_handle: &AppHandle,
+    state: &State<'_, AppState>,
+    model_id: &str,
+) -> Result<PathBuf, String> {
+    let cache_key = model_id.trim();
+
+    {
+        let cache_guard = state
+            .cached_vosk_runtime_model_paths
+            .lock()
+            .map_err(|e| e.to_string())?;
+        if let Some(cached_path) = cache_guard.get(cache_key) {
+            log::debug!(
+                "Using cached Vosk runtime path for model '{}': {}",
+                cache_key,
+                cached_path.display()
+            );
+            return Ok(cached_path.clone());
+        }
+    }
+
+    let resolved_path = vosk_model_manager::resolve_runtime_model_path(app_handle, cache_key)?;
+
+    let mut cache_guard = state
+        .cached_vosk_runtime_model_paths
+        .lock()
+        .map_err(|e| e.to_string())?;
+    cache_guard.insert(cache_key.to_string(), resolved_path.clone());
+
+    Ok(resolved_path)
 }
 
 #[tauri::command]
@@ -102,7 +138,7 @@ fn start_engine(
     }
 
     let vosk_model_path =
-        vosk_model_manager::resolve_selected_model_path(&app_handle, &selected_model_id)?;
+        resolve_cached_vosk_runtime_model_path(&app_handle, &state, &selected_model_id)?;
     let vosk_model_path = utils::normalize_runtime_path(&vosk_model_path);
 
     let vision_model_path = vision_model_manager::resolve_selected_model_path_if_downloaded(
@@ -372,6 +408,7 @@ pub fn run() {
         .manage(AppState {
             engine: Mutex::new(AppEngine::None),
             mic_test_stream: Mutex::new(None),
+            cached_vosk_runtime_model_paths: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
