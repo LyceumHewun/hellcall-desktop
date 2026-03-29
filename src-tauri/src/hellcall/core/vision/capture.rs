@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use image::imageops::{self, FilterType};
-use image::{RgbImage, RgbaImage};
+use image::{Rgb, RgbImage, RgbaImage};
 use log::warn;
 use windows_capture::{
     capture::{Context as CaptureContext, GraphicsCaptureApiHandler},
@@ -13,6 +13,8 @@ use windows_capture::{
     },
 };
 
+const MODEL_IMAGE_SIZE: u32 = 640;
+
 struct SingleFrameHandler {
     captured_image: Option<RgbImage>,
     capture_ratio: f32,
@@ -23,7 +25,6 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
     type Error = anyhow::Error;
 
     fn new(ctx: CaptureContext<Self::Flags>) -> Result<Self, Self::Error> {
-        // Will adjust depending on how flags are exposed (could be ctx.flags() or just .flags depending on crate vers)
         Ok(Self {
             captured_image: None,
             capture_ratio: ctx.flags,
@@ -39,29 +40,25 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
             return Ok(());
         }
 
-        let width = frame.width();
-        let height = frame.height();
+        let (start_x, start_y, crop_size) =
+            center_crop_square(frame.width(), frame.height(), self.capture_ratio);
 
-        let mut buffer = frame.buffer().context("Failed to get frame buffer")?;
+        let mut buffer = frame
+            .buffer_crop(start_x, start_y, start_x + crop_size, start_y + crop_size)
+            .context("Failed to get cropped frame buffer")?;
         let raw = buffer
             .as_nopadding_buffer()
             .context("Failed to get nopadding buffer")?;
 
-        let rgba = RgbaImage::from_raw(width, height, raw.to_vec())
-            .context("Failed to build RgbaImage from frame buffer")?;
-
-        let base_s = width.min(height) as f32;
-        let clamped_ratio = self.capture_ratio.clamp(0.1, 1.0);
-        let s = (base_s * clamped_ratio) as u32;
-
-        let start_x = (width - s) / 2;
-        let start_y = (height - s) / 2;
-        let cropped = imageops::crop_imm(&rgba, start_x, start_y, s, s).to_image();
-
-        let resized_rgba = imageops::resize(&cropped, 640, 640, FilterType::Triangle);
-
-        // Drop alpha channel → RGB
-        self.captured_image = Some(image::DynamicImage::ImageRgba8(resized_rgba).into_rgb8());
+        let rgba = RgbaImage::from_raw(crop_size, crop_size, raw.to_vec())
+            .context("Failed to build cropped RgbaImage from frame buffer")?;
+        let resized_rgba = imageops::resize(
+            &rgba,
+            MODEL_IMAGE_SIZE,
+            MODEL_IMAGE_SIZE,
+            FilterType::Triangle,
+        );
+        self.captured_image = Some(rgba_to_rgb(&resized_rgba));
 
         capture_control.stop();
         Ok(())
@@ -72,7 +69,6 @@ impl GraphicsCaptureApiHandler for SingleFrameHandler {
     }
 }
 
-/// 从主显示器捕获一帧，根据 capture_ratio 裁剪中心区域正方形，缩放到 640×640，返回 RgbImage。
 pub fn capture_frame(capture_ratio: f32) -> Result<RgbImage> {
     let monitor = Monitor::primary().context("Failed to get primary monitor")?;
     let draw_border_settings = if GraphicsCaptureApi::is_border_settings_supported()
@@ -109,4 +105,25 @@ pub fn capture_frame(capture_ratio: f32) -> Result<RgbImage> {
     let mut handler = callback.lock();
     let img = handler.captured_image.take().context("No frame captured")?;
     Ok(img)
+}
+
+fn center_crop_square(width: u32, height: u32, capture_ratio: f32) -> (u32, u32, u32) {
+    let base_s = width.min(height) as f32;
+    let clamped_ratio = capture_ratio.clamp(0.1, 1.0);
+    let crop_size = ((base_s * clamped_ratio).round() as u32).clamp(1, width.min(height));
+    let start_x = (width - crop_size) / 2;
+    let start_y = (height - crop_size) / 2;
+    (start_x, start_y, crop_size)
+}
+
+fn rgba_to_rgb(image: &RgbaImage) -> RgbImage {
+    let (width, height) = image.dimensions();
+    let mut rgb = RgbImage::new(width, height);
+
+    for (src, dst) in image.pixels().zip(rgb.pixels_mut()) {
+        let [r, g, b, _] = src.0;
+        *dst = Rgb([r, g, b]);
+    }
+
+    rgb
 }

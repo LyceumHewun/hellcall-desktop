@@ -4,13 +4,15 @@ use image::RgbImage;
 use ndarray::Array4;
 use ort::ep::ExecutionProvider;
 use ort::session::{builder::GraphOptimizationLevel, Session};
-use ort::value::Tensor;
+use ort::value::TensorRef;
+use rayon::prelude::*;
 use std::sync::Mutex;
 
 /// 持久化的 YOLO 推理引擎。
 /// `Session` 是 Send + Sync，但 `run()` 需要 `&mut self`，因此用 `Mutex` 包装。
 pub struct YoloEngine {
     session: Mutex<Session>,
+    input_buffer: Mutex<Array4<f32>>,
 }
 
 // SAFETY: Session is Send + Sync per ort docs (https://github.com/microsoft/onnxruntime/issues/114).
@@ -55,9 +57,9 @@ impl YoloEngine {
             .commit_from_file(model_path)
             .context("Failed to load ONNX model")?;
 
-        let dummy_tensor = ndarray::Array4::<f32>::zeros((1, 3, 640, 640));
-        let input =
-            Tensor::from_array(dummy_tensor).context("Failed to create Tensor for warmup")?;
+        let input_buffer = ndarray::Array4::<f32>::zeros((1, 3, 640, 640));
+        let input = TensorRef::from_array_view(input_buffer.view())
+            .context("Failed to create TensorRef for warmup")?;
         let _ = session
             .run(ort::inputs![input])
             .context("Warm-up inference failed")?;
@@ -66,15 +68,19 @@ impl YoloEngine {
 
         Ok(Self {
             session: Mutex::new(session),
+            input_buffer: Mutex::new(input_buffer),
         })
     }
 
     /// 对已调整大小的 640×640 RGB 图像执行推理，并返回解析后的 Detection 列表。
     pub fn infer(&self, img: RgbImage) -> Result<Vec<Detection>> {
-        let tensor = preprocess_image(img);
-
-        // Tensor::from_array takes an owned Array4 via the OwnedTensorArrayData trait.
-        let input = Tensor::from_array(tensor).context("Failed to create Tensor from ndarray")?;
+        let mut input_buffer = self
+            .input_buffer
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Input buffer mutex poisoned"))?;
+        preprocess_image_into(&img, &mut input_buffer);
+        let input = TensorRef::from_array_view(input_buffer.view())
+            .context("Failed to create TensorRef from ndarray view")?;
 
         let mut session = self
             .session
@@ -121,21 +127,34 @@ impl YoloEngine {
     }
 }
 
-/// HWC u8 [640, 640, 3] → CHW f32 [1, 3, 640, 640] 归一化至 0..=1。
-pub fn preprocess_image(img: RgbImage) -> Array4<f32> {
+fn preprocess_image_into(img: &RgbImage, tensor: &mut Array4<f32>) {
     let (w, h) = img.dimensions();
     debug_assert_eq!(w, 640);
     debug_assert_eq!(h, 640);
+    debug_assert_eq!(tensor.shape(), &[1, 3, h as usize, w as usize]);
 
-    // Array4 shape: [batch, channel, height, width]
-    let mut tensor = Array4::<f32>::zeros([1, 3, h as usize, w as usize]);
+    let width = w as usize;
+    let height = h as usize;
+    let plane_len = width * height;
+    let row_stride = width * 3;
+    let scale = 1.0 / 255.0;
 
-    for (x, y, pixel) in img.enumerate_pixels() {
-        let [r, g, b] = pixel.0;
-        tensor[[0, 0, y as usize, x as usize]] = r as f32 / 255.0;
-        tensor[[0, 1, y as usize, x as usize]] = g as f32 / 255.0;
-        tensor[[0, 2, y as usize, x as usize]] = b as f32 / 255.0;
-    }
+    let raw = img.as_raw();
+    let data = tensor
+        .as_slice_mut()
+        .expect("YOLO input buffer must be contiguous in memory");
+    let (r_plane, gb_plane) = data.split_at_mut(plane_len);
+    let (g_plane, b_plane) = gb_plane.split_at_mut(plane_len);
 
-    tensor
+    raw.par_chunks_exact(row_stride)
+        .zip(r_plane.par_chunks_mut(width))
+        .zip(g_plane.par_chunks_mut(width))
+        .zip(b_plane.par_chunks_mut(width))
+        .for_each(|(((src_row, r_row), g_row), b_row)| {
+            src_row.chunks_exact(3).enumerate().for_each(|(x, rgb)| {
+                r_row[x] = rgb[0] as f32 * scale;
+                g_row[x] = rgb[1] as f32 * scale;
+                b_row[x] = rgb[2] as f32 * scale;
+            });
+        });
 }
