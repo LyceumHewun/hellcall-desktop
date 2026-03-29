@@ -2,6 +2,7 @@
   "nav": {
     "macros": "宏命令",
     "keybindings": "按键绑定",
+    "stratagems": "战备",
     "settings": "全局设置",
     "log": "终端日志"
   },
@@ -102,6 +103,20 @@
   "log": {
     "waiting": "等待日志...",
     "scroll_bottom": "↓ 滚动到底部"
+  },
+  "stratagems": {
+    "title": "战备指令库",
+    "subtitle": "从 Helldivers Wiki 缓存并展示全部战备指令",
+    "loading": "正在加载战备缓存...",
+    "update": "更新",
+    "updating": "更新中...",
+    "update_success": "战备数据已更新。",
+    "update_failed": "更新战备数据失败。",
+    "empty": "当前还没有战备缓存",
+    "empty_hint": "点击右上角“更新”后，会从 wiki 抓取并写入本地 TOML 缓存。",
+    "last_updated": "上次更新：{{value}}",
+    "category_count": "{{count}} 个分类",
+    "items": "项"
   },
   "updater": {
     "checking": "正在检查更新",

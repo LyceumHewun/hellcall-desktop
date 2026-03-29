@@ -8,6 +8,7 @@ import { GlobalSettingsView } from "./views/GlobalSettingsView";
 import { KeyBindingsView } from "./views/KeyBindingsView";
 import { MacrosView } from "./views/MacrosView";
 import { LogView } from "./views/LogView";
+import { StratagemsView } from "./views/StratagemsView";
 import { Toaster } from "sonner";
 import { useConfigStore } from "../store/configStore";
 
@@ -70,6 +71,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Views */}
           {activeNav === "macros" && <MacrosView />}
+          {activeNav === "stratagems" && <StratagemsView />}
           {activeNav === "settings" && <GlobalSettingsView />}
           {activeNav === "keybindings" && <KeyBindingsView />}
           {activeNav === "log" && <LogView />}
