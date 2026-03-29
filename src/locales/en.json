@@ -2,6 +2,7 @@
   "nav": {
     "macros": "Stratagem Macros",
     "keybindings": "Key Bindings",
+    "stratagems": "Stratagems",
     "settings": "Global Settings",
     "log": "Terminal Log"
   },
@@ -102,6 +103,20 @@
   "log": {
     "waiting": "Waiting for logs...",
     "scroll_bottom": "↓ Scroll to bottom"
+  },
+  "stratagems": {
+    "title": "Stratagems",
+    "subtitle": "Cache and display the full Helldivers stratagem catalog from the wiki",
+    "loading": "Loading stratagem cache...",
+    "update": "Update",
+    "updating": "Updating...",
+    "update_success": "Stratagem data updated.",
+    "update_failed": "Failed to update stratagem data.",
+    "empty": "No stratagem cache yet",
+    "empty_hint": "Use the Update button to fetch the wiki page and store it in the local TOML cache.",
+    "last_updated": "Last updated: {{value}}",
+    "category_count": "{{count}} categories",
+    "items": "items"
   },
   "updater": {
     "checking": "Checking for updates",

@@ -1,5 +1,11 @@
 import { useEffect } from "react";
-import { Settings, Keyboard, Command, Terminal } from "lucide-react";
+import {
+  Settings,
+  Keyboard,
+  Command,
+  Terminal,
+  SatelliteDish,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfigStore } from "../../store/configStore";
 import { useEngineStore } from "../../store/engineStore";
@@ -226,6 +232,18 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         >
           <Keyboard className="w-4 h-4" />
           <span>{t("nav.keybindings")}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveNav("stratagems")}
+          className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+            activeNav === "stratagems"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:bg-white/5 hover:text-white/80"
+          }`}
+        >
+          <SatelliteDish className="w-4 h-4" />
+          <span>{t("nav.stratagems")}</span>
         </button>
 
         <button
