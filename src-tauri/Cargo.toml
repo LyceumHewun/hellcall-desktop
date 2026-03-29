@@ -50,6 +50,9 @@ ndarray = "0.17"
 tauri-plugin-updater = "2.10.0"
 tauri-plugin-process = "2.3.1"
 
+[target.'cfg(windows)'.dependencies]
+junction = "1.4.2"
+
 [profile.dev]
 opt-level = 0
 debug = true

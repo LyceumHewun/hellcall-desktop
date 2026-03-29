@@ -267,33 +267,7 @@ fn remove_existing_junction_path(link_path: &Path) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn create_windows_junction(link_path: &Path, target_path: &Path) -> Result<(), String> {
-    let command = format!(
-        "mklink /J \"{}\" \"{}\"",
-        link_path.display(),
-        target_path.display()
-    );
-
-    let output = std::process::Command::new("cmd")
-        .args(["/C", &command])
-        .output()
-        .map_err(|e| utils::format_and_log_error("Failed to execute mklink for Vosk model", e))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let details = if !stderr.is_empty() {
-        stderr
-    } else if !stdout.is_empty() {
-        stdout
-    } else {
-        "mklink returned a non-zero exit code without output".to_string()
-    };
-
-    Err(utils::format_and_log_error(
-        "Failed to create ProgramData junction for Vosk model",
-        details,
-    ))
+    junction::create(target_path, link_path).map_err(|e| {
+        utils::format_and_log_error("Failed to create ProgramData junction for Vosk model", e)
+    })
 }
