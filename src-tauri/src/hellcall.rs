@@ -4,7 +4,6 @@ pub mod core;
 pub use config::{load_config_from_path, save_config_to_path, Config};
 
 use anyhow::{anyhow, Result};
-use cpal::traits::{DeviceTrait, HostTrait};
 use log::{info, warn};
 use rand::seq::IndexedRandom;
 use std::collections::HashMap;
@@ -19,6 +18,7 @@ use self::core::audio::*;
 use self::core::command::*;
 use self::core::keypress::*;
 use self::core::matcher::*;
+use self::core::microphone::*;
 use self::core::speaker::*;
 use self::core::vision::YoloEngine;
 use crate::utils::*;
@@ -95,15 +95,7 @@ impl HellcallEngine {
         existing: Option<(Arc<KeyPresser>, thread::JoinHandle<()>)>,
     ) -> Result<Self> {
         // 选择输入设备
-        let input_device = if let Some(name) = input_device_name.filter(|n| !n.is_empty()) {
-            name
-        } else {
-            let host = cpal::default_host();
-            let default_device = host
-                .default_input_device()
-                .ok_or_else(|| anyhow!("No default input device found"))?;
-            default_device.name()?
-        };
+        let input_device = resolve_input_device_name(input_device_name)?;
         info!("input_device_name: {}", input_device);
 
         // 选择音频目录
@@ -144,7 +136,11 @@ impl HellcallEngine {
         key_presser.clear_listen_map();
 
         // 初始化 Speaker（每次都新建，stop 时会随 Engine 一起 drop）
-        let speaker = Arc::new(Speaker::new(config.speaker.clone().into())?);
+        let speaker = Arc::new(Speaker::new(
+            config.speaker.clone().into(),
+            &input_device,
+            config.microphone.enable_denoise,
+        )?);
 
         // 构建命令表
         let command_map: HashMap<String, Box<dyn Fn() + Send + Sync>> = config
@@ -206,8 +202,12 @@ impl HellcallEngine {
 
         audio_recognizer_config.set_grammar(grammar);
         let recognizer = AudioRecognizer::new(vosk_model_path, audio_recognizer_config)?;
-        let mut processor =
-            AudioBufferProcessor::new_with_input_device_name(recognizer, input_device)?;
+        let mut processor = AudioBufferProcessor::new_with_input_device_name(
+            recognizer,
+            input_device,
+            config.microphone.enable_denoise,
+            speaker.mic_passthrough(),
+        )?;
 
         match config.recognizer.talk_mode {
             TalkMode::PushToTalk => {

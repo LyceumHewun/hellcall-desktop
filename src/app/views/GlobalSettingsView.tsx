@@ -33,11 +33,14 @@ export function GlobalSettingsView() {
   const { t, i18n } = useTranslation();
   const { status, selectedDevice, setSelectedDevice } = useEngineStore();
   const isEngineRunning = status === "STARTING" || status === "ACTIVE";
+  const isVirtualMicLocked = isEngineRunning;
 
   const [devices, setDevices] = useState<string[]>([]);
+  const [outputDevices, setOutputDevices] = useState<string[]>([]);
   const [audioDirectory, setAudioDirectory] = useState("");
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micVolume, setMicVolume] = useState(0);
+  const [virtualMicDeviceError, setVirtualMicDeviceError] = useState("");
 
   const fetchDevices = async () => {
     try {
@@ -57,8 +60,18 @@ export function GlobalSettingsView() {
     }
   };
 
+  const fetchOutputDevices = async () => {
+    try {
+      const devs = await invoke<string[]>("get_output_audio_devices");
+      setOutputDevices(devs);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchDevices();
+    fetchOutputDevices();
     fetchAudioDirectory();
   }, []);
 
@@ -92,12 +105,15 @@ export function GlobalSettingsView() {
   }, [isEngineRunning, isTestingMic]);
 
   const toggleMicTest = async () => {
+    if (!config) return;
+
     if (isTestingMic) {
       await invoke("stop_mic_test");
       setIsTestingMic(false);
     } else {
       await invoke("start_mic_test", {
         deviceName: selectedDevice,
+        microphoneConfig: config.microphone,
       });
       setIsTestingMic(true);
     }
@@ -110,6 +126,40 @@ export function GlobalSettingsView() {
       await openPath(audioDirectory);
     } catch (error) {
       console.error("Failed to open audio directory", error);
+    }
+  };
+
+  const handleVirtualMicDeviceChange = async (val: string) => {
+    if (!config) return;
+
+    if (val === "none") {
+      setVirtualMicDeviceError("");
+      updateConfig((c) => {
+        c.speaker.virtual_mic_device = null;
+      });
+      return;
+    }
+
+    try {
+      await invoke("validate_virtual_mic_output_device", {
+        inputDeviceName: selectedDevice,
+        outputDeviceName: val,
+        microphoneConfig: config.microphone,
+      });
+
+      setVirtualMicDeviceError("");
+      updateConfig((c) => {
+        c.speaker.virtual_mic_device = val;
+      });
+    } catch (error) {
+      console.error("Failed to validate virtual output device", error);
+      const message =
+        error instanceof Error ? error.message : String(error ?? "");
+      setVirtualMicDeviceError(
+        message
+          ? `${t("settings.virtual_mic_device_invalid")} ${message}`
+          : t("settings.virtual_mic_device_invalid"),
+      );
     }
   };
 
@@ -154,7 +204,16 @@ export function GlobalSettingsView() {
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
 
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.microphone")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label>{t("settings.input_device")}</Label>
@@ -215,6 +274,24 @@ export function GlobalSettingsView() {
                   </Button>
                 </div>
               </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.enable_denoise")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.enable_denoise_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.microphone.enable_denoise}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.microphone.enable_denoise = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -265,24 +342,6 @@ export function GlobalSettingsView() {
                     })
                   }
                 />
-              </div>
-
-              <div className="space-y-3">
-                <Label>{t("settings.enable_denoise")}</Label>
-                <div className="flex items-center justify-between space-x-4">
-                  <p className="text-sm text-white/50">
-                    {t("settings.enable_denoise_desc")}
-                  </p>
-                  <Switch
-                    className="border cursor-pointer"
-                    checked={config.recognizer.enable_denoise}
-                    onCheckedChange={(checked) =>
-                      updateConfig((c) => {
-                        c.recognizer.enable_denoise = checked;
-                      })
-                    }
-                  />
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -508,6 +567,24 @@ export function GlobalSettingsView() {
               </div>
 
               <div className="space-y-3">
+                <Label>{t("settings.monitor_local_playback")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.monitor_local_playback_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.speaker.monitor_local_playback}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.speaker.monitor_local_playback = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <Label>
                   {t("settings.speaker_speed", {
                     val: config.speaker.speed.toFixed(2),
@@ -521,6 +598,105 @@ export function GlobalSettingsView() {
                   onValueChange={([val]) =>
                     updateConfig((c) => {
                       c.speaker.speed = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.virtual_mic")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.virtual_mic_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.speaker.virtual_mic_enabled}
+                    disabled={isVirtualMicLocked}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.speaker.virtual_mic_enabled = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.virtual_mic_device")}</Label>
+                <Select
+                  value={config.speaker.virtual_mic_device || "none"}
+                  disabled={isVirtualMicLocked}
+                  onValueChange={handleVirtualMicDeviceChange}
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue
+                      placeholder={t("settings.virtual_mic_device_placeholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="none">
+                      {t("settings.virtual_mic_device_none")}
+                    </SelectItem>
+                    {outputDevices.map((device) => (
+                      <SelectItem key={device} value={device}>
+                        {device}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/40">
+                  {t("settings.virtual_mic_device_hint")}
+                </p>
+                {virtualMicDeviceError ? (
+                  <p className="text-xs text-red-300/90">
+                    {virtualMicDeviceError}
+                  </p>
+                ) : null}
+                {isVirtualMicLocked ? (
+                  <p className="text-xs text-amber-300/80">
+                    {t("settings.virtual_mic_locked")}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.virtual_mic_macro_volume", {
+                    val: config.speaker.virtual_mic_macro_volume.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.virtual_mic_macro_volume]}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  disabled={isVirtualMicLocked}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.virtual_mic_macro_volume = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.virtual_mic_input_volume", {
+                    val: config.speaker.virtual_mic_input_volume.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.virtual_mic_input_volume]}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  disabled={
+                    isVirtualMicLocked || !config.speaker.virtual_mic_enabled
+                  }
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.virtual_mic_input_volume = val;
                     })
                   }
                 />
