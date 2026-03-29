@@ -35,6 +35,7 @@ export function GlobalSettingsView() {
   const isEngineRunning = status === "STARTING" || status === "ACTIVE";
 
   const [devices, setDevices] = useState<string[]>([]);
+  const [outputDevices, setOutputDevices] = useState<string[]>([]);
   const [audioDirectory, setAudioDirectory] = useState("");
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micVolume, setMicVolume] = useState(0);
@@ -57,8 +58,18 @@ export function GlobalSettingsView() {
     }
   };
 
+  const fetchOutputDevices = async () => {
+    try {
+      const devs = await invoke<string[]>("get_output_audio_devices");
+      setOutputDevices(devs);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchDevices();
+    fetchOutputDevices();
     fetchAudioDirectory();
   }, []);
 
@@ -508,6 +519,24 @@ export function GlobalSettingsView() {
               </div>
 
               <div className="space-y-3">
+                <Label>{t("settings.monitor_local_playback")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.monitor_local_playback_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.speaker.monitor_local_playback}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.speaker.monitor_local_playback = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <Label>
                   {t("settings.speaker_speed", {
                     val: config.speaker.speed.toFixed(2),
@@ -521,6 +550,94 @@ export function GlobalSettingsView() {
                   onValueChange={([val]) =>
                     updateConfig((c) => {
                       c.speaker.speed = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.virtual_mic")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.virtual_mic_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.speaker.virtual_mic_enabled}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.speaker.virtual_mic_enabled = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.virtual_mic_device")}</Label>
+                <Select
+                  value={config.speaker.virtual_mic_device || "none"}
+                  onValueChange={(val) =>
+                    updateConfig((c) => {
+                      c.speaker.virtual_mic_device =
+                        val === "none" ? null : val;
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue
+                      placeholder={t("settings.virtual_mic_device_placeholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="none">
+                      {t("settings.virtual_mic_device_none")}
+                    </SelectItem>
+                    {outputDevices.map((device) => (
+                      <SelectItem key={device} value={device}>
+                        {device}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/40">
+                  {t("settings.virtual_mic_device_hint")}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.virtual_mic_macro_volume", {
+                    val: config.speaker.virtual_mic_macro_volume.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.virtual_mic_macro_volume]}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.virtual_mic_macro_volume = val;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>
+                  {t("settings.virtual_mic_input_volume", {
+                    val: config.speaker.virtual_mic_input_volume.toFixed(2),
+                  })}
+                </Label>
+                <Slider
+                  value={[config.speaker.virtual_mic_input_volume]}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  onValueChange={([val]) =>
+                    updateConfig((c) => {
+                      c.speaker.virtual_mic_input_volume = val;
                     })
                   }
                 />

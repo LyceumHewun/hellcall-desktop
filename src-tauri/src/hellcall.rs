@@ -144,7 +144,7 @@ impl HellcallEngine {
         key_presser.clear_listen_map();
 
         // 初始化 Speaker（每次都新建，stop 时会随 Engine 一起 drop）
-        let speaker = Arc::new(Speaker::new(config.speaker.clone().into())?);
+        let speaker = Arc::new(Speaker::new(config.speaker.clone().into(), &input_device)?);
 
         // 构建命令表
         let command_map: HashMap<String, Box<dyn Fn() + Send + Sync>> = config
@@ -206,8 +206,11 @@ impl HellcallEngine {
 
         audio_recognizer_config.set_grammar(grammar);
         let recognizer = AudioRecognizer::new(vosk_model_path, audio_recognizer_config)?;
-        let mut processor =
-            AudioBufferProcessor::new_with_input_device_name(recognizer, input_device)?;
+        let mut processor = AudioBufferProcessor::new_with_input_device_name(
+            recognizer,
+            input_device,
+            speaker.mic_passthrough(),
+        )?;
 
         match config.recognizer.talk_mode {
             TalkMode::PushToTalk => {

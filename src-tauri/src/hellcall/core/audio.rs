@@ -8,6 +8,8 @@ use log::{debug, info};
 use vosk::{Model, Recognizer};
 use webrtc_vad::{SampleRate, Vad, VadMode};
 
+use super::speaker::MicPassthroughHandle;
+
 static VOSK_SAMPLE_RATE: f32 = 16000.0;
 
 #[derive(Debug, Clone)]
@@ -261,6 +263,7 @@ pub struct AudioBufferProcessor {
     thread_handle: Option<JoinHandle<Result<AudioRecognizer>>>,
     is_speaking: Option<Arc<AtomicBool>>,
     is_finalized: Option<Arc<AtomicBool>>,
+    mic_passthrough: Option<MicPassthroughHandle>,
 }
 
 impl AudioBufferProcessor {
@@ -284,12 +287,14 @@ impl AudioBufferProcessor {
             thread_handle: None,
             is_speaking: Some(is_speaking),
             is_finalized: Some(is_finalized),
+            mic_passthrough: None,
         })
     }
 
     pub fn new_with_input_device_name(
         recognizer: AudioRecognizer,
         input_device_name: String,
+        mic_passthrough: Option<MicPassthroughHandle>,
     ) -> Result<Self> {
         let is_speaking = Arc::clone(&recognizer.is_speaking);
         let is_finalized = Arc::clone(&recognizer.is_finalized);
@@ -301,6 +306,7 @@ impl AudioBufferProcessor {
             thread_handle: None,
             is_speaking: Some(is_speaking),
             is_finalized: Some(is_finalized),
+            mic_passthrough,
         })
     }
 
@@ -346,8 +352,6 @@ impl AudioBufferProcessor {
 
         let error_callback = |err| log::error!("an error occurred on stream: {}", err);
 
-        let tx_clone = tx.clone();
-
         fn process_to_mono_f32<T: Copy>(
             data: &[T],
             channels: u16,
@@ -365,42 +369,68 @@ impl AudioBufferProcessor {
         }
 
         let stream = match sample_format {
-            cpal::SampleFormat::F32 => device.build_input_stream(
-                &config.into(),
-                move |data: &[f32], _: &_| {
-                    if let Err(std::sync::mpsc::TrySendError::Full(_)) =
-                        tx_clone.try_send(process_to_mono_f32(data, channels, |x| x * 32768.0))
-                    {
-                        log::warn!("Audio processing is too slow, dropping frames");
-                    }
-                },
-                error_callback,
-                None,
-            )?,
-            cpal::SampleFormat::I16 => device.build_input_stream(
-                &config.into(),
-                move |data: &[i16], _: &_| {
-                    if let Err(std::sync::mpsc::TrySendError::Full(_)) =
-                        tx_clone.try_send(process_to_mono_f32(data, channels, |x| x as f32))
-                    {
-                        log::warn!("Audio processing is too slow, dropping frames");
-                    }
-                },
-                error_callback,
-                None,
-            )?,
-            cpal::SampleFormat::U16 => device.build_input_stream(
-                &config.into(),
-                move |data: &[u16], _: &_| {
-                    if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx_clone
-                        .try_send(process_to_mono_f32(data, channels, |x| x as f32 - 32768.0))
-                    {
-                        log::warn!("Audio processing is too slow, dropping frames");
-                    }
-                },
-                error_callback,
-                None,
-            )?,
+            cpal::SampleFormat::F32 => {
+                let tx_clone = tx.clone();
+                let mic_passthrough = self.mic_passthrough.clone();
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[f32], _: &_| {
+                        let mono = process_to_mono_f32(data, channels, |x| x.clamp(-1.0, 1.0));
+                        if let Some(mic_passthrough) = &mic_passthrough {
+                            mic_passthrough.push_samples(&mono);
+                        }
+                        if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx_clone
+                            .try_send(mono.iter().map(|sample| sample * 32768.0).collect())
+                        {
+                            log::warn!("Audio processing is too slow, dropping frames");
+                        }
+                    },
+                    error_callback,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I16 => {
+                let tx_clone = tx.clone();
+                let mic_passthrough = self.mic_passthrough.clone();
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[i16], _: &_| {
+                        let mono = process_to_mono_f32(data, channels, |x| x as f32 / 32768.0);
+                        if let Some(mic_passthrough) = &mic_passthrough {
+                            mic_passthrough.push_samples(&mono);
+                        }
+                        if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx_clone
+                            .try_send(mono.iter().map(|sample| sample * 32768.0).collect())
+                        {
+                            log::warn!("Audio processing is too slow, dropping frames");
+                        }
+                    },
+                    error_callback,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::U16 => {
+                let tx_clone = tx.clone();
+                let mic_passthrough = self.mic_passthrough.clone();
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[u16], _: &_| {
+                        let mono = process_to_mono_f32(data, channels, |x| {
+                            (x as f32 - 32768.0) / 32768.0
+                        });
+                        if let Some(mic_passthrough) = &mic_passthrough {
+                            mic_passthrough.push_samples(&mono);
+                        }
+                        if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx_clone
+                            .try_send(mono.iter().map(|sample| sample * 32768.0).collect())
+                        {
+                            log::warn!("Audio processing is too slow, dropping frames");
+                        }
+                    },
+                    error_callback,
+                    None,
+                )?
+            }
             _ => {
                 self.recognizer = Some(recognizer);
                 return Err(anyhow::anyhow!(

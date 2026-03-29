@@ -36,6 +36,11 @@ export interface SpeakerConfig {
   volume: number;
   speed: number;
   sleep_until_end: boolean;
+  monitor_local_playback: boolean;
+  virtual_mic_enabled: boolean;
+  virtual_mic_device: string | null;
+  virtual_mic_macro_volume: number;
+  virtual_mic_input_volume: number;
 }
 
 export interface AppConfig {

@@ -250,6 +250,20 @@ fn get_audio_devices() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+fn get_output_audio_devices() -> Result<Vec<String>, String> {
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    let devices = host.output_devices().map_err(|e| e.to_string())?;
+    let mut names = Vec::new();
+    for device in devices {
+        if let Ok(name) = device.name() {
+            names.push(name);
+        }
+    }
+    Ok(names)
+}
+
+#[tauri::command]
 fn get_audio_files(app_handle: AppHandle) -> Result<Vec<String>, String> {
     fn collect_audio_files(
         current_dir: &std::path::Path,
@@ -428,6 +442,7 @@ pub fn run() {
             download_vosk_model,
             download_vision_model,
             get_audio_devices,
+            get_output_audio_devices,
             get_audio_files,
             get_audio_directory,
             start_mic_test,

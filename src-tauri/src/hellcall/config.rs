@@ -26,6 +26,22 @@ fn default_speaker_sleep_until_end() -> bool {
     true
 }
 
+fn default_monitor_local_playback() -> bool {
+    true
+}
+
+fn default_virtual_mic_enabled() -> bool {
+    false
+}
+
+fn default_virtual_mic_macro_volume() -> f32 {
+    1.0
+}
+
+fn default_virtual_mic_input_volume() -> f32 {
+    1.0
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VisionConfig {
     #[serde(default)]
@@ -81,6 +97,16 @@ pub struct SpeakerConfig {
     pub speed: f32,
     #[serde(default = "default_speaker_sleep_until_end")]
     pub sleep_until_end: bool,
+    #[serde(default = "default_monitor_local_playback")]
+    pub monitor_local_playback: bool,
+    #[serde(default = "default_virtual_mic_enabled")]
+    pub virtual_mic_enabled: bool,
+    #[serde(default)]
+    pub virtual_mic_device: Option<String>,
+    #[serde(default = "default_virtual_mic_macro_volume")]
+    pub virtual_mic_macro_volume: f32,
+    #[serde(default = "default_virtual_mic_input_volume")]
+    pub virtual_mic_input_volume: f32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -151,6 +177,11 @@ impl Default for SpeakerConfig {
             volume: 1.0,
             speed: 1.0,
             sleep_until_end: true,
+            monitor_local_playback: true,
+            virtual_mic_enabled: false,
+            virtual_mic_device: None,
+            virtual_mic_macro_volume: 1.0,
+            virtual_mic_input_volume: 1.0,
         }
     }
 }
@@ -161,6 +192,11 @@ impl From<SpeakerConfig> for SpeakerRuntimeConfig {
             volume: config.volume,
             speed: config.speed,
             sleep_until_end: config.sleep_until_end,
+            monitor_local_playback: config.monitor_local_playback,
+            virtual_mic_enabled: config.virtual_mic_enabled,
+            virtual_mic_device: config.virtual_mic_device,
+            virtual_mic_macro_volume: config.virtual_mic_macro_volume,
+            virtual_mic_input_volume: config.virtual_mic_input_volume,
         }
     }
 }
