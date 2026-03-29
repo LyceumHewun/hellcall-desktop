@@ -5,6 +5,7 @@ const VOSK_MODEL_STORAGE_KEY = "hellcall.selectedVoskModelId";
 const DEFAULT_VOSK_MODEL_ID = "vosk-model-small-cn-0.22";
 const VISION_MODEL_STORAGE_KEY = "hellcall.selectedVisionModelId";
 const DEFAULT_VISION_MODEL_ID = "helldivers2-yolo-v8n";
+const INPUT_DEVICE_STORAGE_KEY = "hellcall.selectedInputDevice";
 
 const getStoredModelId = (storageKey: string, fallback: string) => {
   if (typeof window === "undefined") {
@@ -37,8 +38,17 @@ export const useEngineStore = create<EngineState>((set) => ({
   lastStartedConfigSignature: null,
   setLastStartedConfigSignature: (signature) =>
     set({ lastStartedConfigSignature: signature }),
-  selectedDevice: null,
-  setSelectedDevice: (device) => set({ selectedDevice: device }),
+  selectedDevice: getStoredModelId(INPUT_DEVICE_STORAGE_KEY, "") || null,
+  setSelectedDevice: (device) => {
+    if (typeof window !== "undefined") {
+      if (device) {
+        window.localStorage.setItem(INPUT_DEVICE_STORAGE_KEY, device);
+      } else {
+        window.localStorage.removeItem(INPUT_DEVICE_STORAGE_KEY);
+      }
+    }
+    set({ selectedDevice: device });
+  },
   selectedVoskModelId: getStoredModelId(
     VOSK_MODEL_STORAGE_KEY,
     DEFAULT_VOSK_MODEL_ID,
