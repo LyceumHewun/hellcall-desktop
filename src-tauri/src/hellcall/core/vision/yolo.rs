@@ -2,6 +2,7 @@ use super::corrector::Detection;
 use anyhow::{Context, Result};
 use image::RgbImage;
 use ndarray::Array4;
+use ort::ep::ExecutionProvider;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
 use std::sync::Mutex;
@@ -19,12 +20,36 @@ unsafe impl Sync for YoloEngine {}
 impl YoloEngine {
     /// 从 `.onnx` 文件路径加载模型。
     pub fn new(model_path: &str) -> Result<Self> {
+        let cuda = ort::ep::CUDA::default();
         let mut builder = Session::builder()
             .context("Failed to create ort session builder")?
             .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(|e| anyhow::anyhow!("Failed to set optimization level: {}", e))?
-            .with_execution_providers([ort::ep::CUDA::default().build()])
-            .map_err(|e| anyhow::anyhow!("Failed to configure execution providers: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to set optimization level: {}", e))?;
+
+        let backend_log = match cuda.is_available() {
+            Ok(true) => match cuda.register(&mut builder) {
+                Ok(()) => {
+                    "CUDA execution provider registered successfully for the YOLO session."
+                }
+                Err(e) => {
+                    log::warn!(
+                        "CUDA execution provider is available but failed to register: {}. YOLO will fall back to CPU.",
+                        e
+                    );
+                    "CUDA execution provider registration failed; YOLO will use CPU fallback."
+                }
+            },
+            Ok(false) => {
+                "CUDA execution provider is unavailable in the current ONNX Runtime environment; YOLO will use CPU fallback."
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to query CUDA execution provider availability: {}. YOLO will continue without explicitly enabling CUDA.",
+                    e
+                );
+                "CUDA execution provider availability check failed; YOLO will use CPU fallback."
+            }
+        };
 
         let mut session = builder
             .commit_from_file(model_path)
@@ -36,9 +61,8 @@ impl YoloEngine {
         let _ = session
             .run(ort::inputs![input])
             .context("Warm-up inference failed")?;
-        log::info!("CUDA/YOLO Engine warmed up and locked into VRAM.");
-
-        log::info!("YOLO Engine created, attempted to use CUDA execution provider.");
+        log::info!("YOLO engine warm-up inference completed.");
+        log::info!("{}", backend_log);
 
         Ok(Self {
             session: Mutex::new(session),
