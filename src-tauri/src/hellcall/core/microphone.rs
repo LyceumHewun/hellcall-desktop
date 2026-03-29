@@ -138,6 +138,7 @@ impl VirtualMicMixer {
         input_volume: f32,
         enable_denoise: bool,
     ) -> Result<Self> {
+        ensure_no_virtual_mic_feedback_loop(input_device_name, output_device_name)?;
         ensure_virtual_output_has_capture_pair(output_device_name)?;
 
         let device = find_output_device_by_name(output_device_name)
@@ -354,9 +355,9 @@ pub fn validate_virtual_output_device_for_mix(
     output_device_name: &str,
     enable_denoise: bool,
 ) -> Result<()> {
-    ensure_virtual_output_has_capture_pair(output_device_name)?;
-
     let input_device_name = resolve_input_device_name(selected_input_name)?;
+    ensure_no_virtual_mic_feedback_loop(&input_device_name, output_device_name)?;
+    ensure_virtual_output_has_capture_pair(output_device_name)?;
     let microphone_input = open_input_stream(&input_device_name)
         .context("failed to open physical microphone input stream for mix validation")?;
     let mixer = VirtualMicMixer::new(
@@ -645,6 +646,21 @@ fn ensure_virtual_output_has_capture_pair(output_device_name: &str) -> Result<()
     Err(anyhow::anyhow!(
         "the selected output device does not have a matching recording endpoint, so apps cannot receive it as a microphone"
     ))
+}
+
+fn ensure_no_virtual_mic_feedback_loop(
+    input_device_name: &str,
+    output_device_name: &str,
+) -> Result<()> {
+    if canonicalize_virtual_route_name(input_device_name)
+        == canonicalize_virtual_route_name(output_device_name)
+    {
+        return Err(anyhow::anyhow!(
+            "the live microphone and virtual microphone cannot be the same device, or the mix will feed back into itself"
+        ));
+    }
+
+    Ok(())
 }
 
 fn device_names_match_for_virtual_route(output_name: &str, input_name: &str) -> bool {
