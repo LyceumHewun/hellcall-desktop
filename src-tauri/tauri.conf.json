@@ -32,7 +32,10 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFBMUEwNzg4MUQ2Q0M5RApSV1Nkek5hQmVLQ2hBZkhlQW5JUmEzV09La3picDZDVm8zbnowZGZkU3orZHNsb2ttN3pXQi8wMwo=",
       "endpoints": [
-        "https://lyceumhewun.github.io/hellcall-desktop/updater.json"
+        "https://lyceumhewun.github.io/hellcall-desktop/updater.json",
+        "https://hellcall-updater.hewunlyceum.workers.dev/",
+        "https://hellcall-updater.lyceum.cc/",
+        "https://hellcall.lyceum.cc/updater.json"
       ]
     }
   },

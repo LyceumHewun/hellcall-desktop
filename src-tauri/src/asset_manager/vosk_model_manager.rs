@@ -19,11 +19,11 @@ struct AvailableVoskModelDefinition {
 const AVAILABLE_VOSK_MODELS: &[AvailableVoskModelDefinition] = &[
     AvailableVoskModelDefinition {
         id: "vosk-model-small-cn-0.22",
-        url: "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/cn/vosk-model-small-cn-0.22.7z",
     },
     AvailableVoskModelDefinition {
         id: "vosk-model-small-en-us-0.15",
-        url: "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/en-us/vosk-model-small-en-us-0.15.7z",
     },
 ];
 
@@ -58,7 +58,7 @@ pub async fn download_model(
         .ok_or_else(|| format!("Unknown Vosk model '{}'.", model_id))?;
     let download_url = if url.trim().is_empty() {
         official_model.url
-    } else if url == official_model.url {
+    } else if asset_downloader::is_recognized_download_url(&url, official_model.url) {
         official_model.url
     } else {
         return Err(format!(
@@ -73,7 +73,7 @@ pub async fn download_model(
         &model_id,
         download_url,
         &model_path,
-        AssetType::ZipArchive,
+        AssetType::SevenZipArchive,
         MODEL_DOWNLOAD_EVENT,
     )
     .await

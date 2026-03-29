@@ -1,4 +1,4 @@
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -173,7 +173,10 @@ async fn fetch_stratagem_page_html(client: &reqwest::Client) -> Result<String, S
             );
         }
         Err(error) => {
-            log::warn!("Failed to fetch wiki page directly, falling back to API: {}", error);
+            log::warn!(
+                "Failed to fetch wiki page directly, falling back to API: {}",
+                error
+            );
         }
     }
 
