@@ -39,7 +39,7 @@ pub async fn download_model(
 
     let download_url = if url.trim().is_empty() {
         VISION_MODEL_URL
-    } else if url == VISION_MODEL_URL {
+    } else if asset_downloader::is_recognized_download_url(&url, VISION_MODEL_URL) {
         VISION_MODEL_URL
     } else {
         return Err(format!(

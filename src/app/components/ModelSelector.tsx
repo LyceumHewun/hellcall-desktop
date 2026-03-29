@@ -3,7 +3,7 @@ import { useEngineStore } from "../../store/engineStore";
 import { useTranslation } from "react-i18next";
 
 function formatVoskModelName(id: string) {
-  return id.replace(/^vosk-model-small-/, "");
+  return id;
 }
 
 export function ModelSelector() {
