@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { KeySequence } from "./KeySequence";
 import { mapWebEventToRustInput, KeyRecorder } from "./KeyRecorder";
@@ -22,9 +22,16 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { CommandConfig } from "../../types/config";
 import { useConfigStore } from "../../store/configStore";
+import { useStratagemsStore } from "../../store/stratagemsStore";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
+import {
+  findExactStratagemMatch,
+  findStratagemPrefixMatches,
+  getDirectionalSequence,
+} from "../../utils/stratagems";
 
 interface MacroCardProps {
   id: string;
@@ -41,6 +48,8 @@ export function MacroCard({
 }: MacroCardProps) {
   const { t } = useTranslation();
   const { updateConfig } = useConfigStore();
+  const stratagemCatalog = useStratagemsStore((state) => state.catalog);
+  const fetchStratagemCatalog = useStratagemsStore((state) => state.fetchCatalog);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
@@ -66,6 +75,12 @@ export function MacroCard({
   };
 
   useEffect(() => {
+    fetchStratagemCatalog().catch((error) => {
+      console.error("Failed to load stratagem catalog", error);
+    });
+  }, [fetchStratagemCatalog]);
+
+  useEffect(() => {
     if (!isRecording) return;
 
     const handleInput = (e: KeyboardEvent | MouseEvent) => {
@@ -82,6 +97,10 @@ export function MacroCard({
 
       if (e.type === "keydown") {
         const kbEvent = e as KeyboardEvent;
+        if (kbEvent.repeat) {
+          return;
+        }
+
         if (kbEvent.key === "Escape" || kbEvent.key === "Enter") {
           setIsRecording(false);
           return;
@@ -120,23 +139,47 @@ export function MacroCard({
           return;
         }
 
-        // 1. The THROW Lock Rule: If THROW is already in the array, reject all inputs
-        if (currentKeys.includes("THROW")) {
+        if (logicalKey === "OPEN") {
+          updateConfig((draft) => {
+            const keys = draft.commands[commandIndex].keys.filter(
+              (key) => key !== "OPEN",
+            );
+            draft.commands[commandIndex].keys = currentKeys.includes("OPEN")
+              ? keys
+              : ["OPEN", ...keys];
+          });
           return;
         }
 
-        // 2. The OPEN Rule: OPEN can only be the very first key
-        if (logicalKey === "OPEN" && currentKeys.length > 0) {
+        if (logicalKey === "THROW") {
+          updateConfig((draft) => {
+            const keys = draft.commands[commandIndex].keys.filter(
+              (key) => key !== "THROW",
+            );
+            draft.commands[commandIndex].keys = currentKeys.includes("THROW")
+              ? keys
+              : [...keys, "THROW"];
+          });
           return;
         }
 
-        // 3. Length Limit Rule: Reject if sequence is 11 or longer
-        if (currentKeys.length >= 11) {
+        if (getDirectionalSequence(currentKeys).length >= 11) {
           return;
         }
 
         updateConfig((draft) => {
-          draft.commands[commandIndex].keys.push(logicalKey as string);
+          const keys = draft.commands[commandIndex].keys.filter(
+            (key) => key !== "OPEN" && key !== "THROW",
+          );
+          const hasOpen = draft.commands[commandIndex].keys.includes("OPEN");
+          const hasThrow = draft.commands[commandIndex].keys.includes("THROW");
+
+          draft.commands[commandIndex].keys = [
+            ...(hasOpen ? ["OPEN"] : []),
+            ...keys,
+            logicalKey,
+            ...(hasThrow ? ["THROW"] : []),
+          ];
         });
       }
     };
@@ -240,6 +283,30 @@ export function MacroCard({
     isLoadingAudioFiles || (hasLoadedAudioFiles && !hasAnyAudioFiles);
 
   const isUnsaved = command.command.trim() === "" || command.keys.length === 0;
+  const stratagemItems = stratagemCatalog?.items ?? [];
+  const exactMatchedStratagem = useMemo(
+    () => findExactStratagemMatch(stratagemItems, command.keys),
+    [command.keys, stratagemItems],
+  );
+  const prefixMatchedStratagems = useMemo(
+    () => findStratagemPrefixMatches(stratagemItems, command.keys).slice(0, 10),
+    [command.keys, stratagemItems],
+  );
+
+  const applyStratagemPreset = (stratagemCommand: string[]) => {
+    updateConfig((draft) => {
+      const currentKeys = draft.commands[commandIndex].keys;
+      const hasOpen = currentKeys.includes("OPEN");
+      const hasThrow = currentKeys.includes("THROW");
+
+      draft.commands[commandIndex].keys = [
+        ...(hasOpen ? ["OPEN"] : []),
+        ...stratagemCommand,
+        ...(hasThrow ? ["THROW"] : []),
+      ];
+    });
+    setIsRecording(false);
+  };
 
   return (
     <div
@@ -266,17 +333,31 @@ export function MacroCard({
         </button>
 
         {/* Voice Trigger Input */}
-        <input
-          type="text"
-          value={command.command}
-          onChange={(e) =>
-            updateConfig((draft) => {
-              draft.commands[commandIndex].command = e.target.value;
-            })
-          }
-          className="w-[20%] min-w-[140px] bg-transparent border-b border-white/10 px-2 py-1 text-white placeholder:text-white/30 focus:outline-none focus:border-[#FCE100]/60 transition-colors text-sm"
-          placeholder={t("macros.card.trigger")}
-        />
+        <div className="w-[20%] min-w-[140px] flex items-center gap-2">
+          <input
+            type="text"
+            value={command.command}
+            onChange={(e) =>
+              updateConfig((draft) => {
+                draft.commands[commandIndex].command = e.target.value;
+              })
+            }
+            className="flex-1 min-w-0 bg-transparent border-b border-white/10 px-2 py-1 text-white placeholder:text-white/30 focus:outline-none focus:border-[#FCE100]/60 transition-colors text-sm"
+            placeholder={t("macros.card.trigger")}
+          />
+          {exactMatchedStratagem?.icon_url ? (
+            <div
+              className="h-9 w-9 shrink-0 rounded border border-[#FCE100]/30 bg-black/30 p-1"
+              title={exactMatchedStratagem.name}
+            >
+              <ImageWithFallback
+                src={exactMatchedStratagem.icon_url}
+                alt={exactMatchedStratagem.name}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          ) : null}
+        </div>
 
         {/* Macro Sequence */}
         <div className="flex-1 flex items-center">
@@ -330,6 +411,32 @@ export function MacroCard({
           </button>
         </div>
       </div>
+
+      {isRecording && prefixMatchedStratagems.length > 0 ? (
+        <div className="border-t border-white/10 bg-[#15171C] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {prefixMatchedStratagems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                data-ignore-record="true"
+                onClick={() => applyStratagemPreset(item.command)}
+                className="flex items-center gap-2 rounded border border-white/10 bg-white/5 px-2.5 py-1.5 text-left text-white/80 transition-colors hover:border-[#FCE100]/40 hover:bg-[#FCE100]/10 hover:text-white"
+                title={item.name}
+              >
+                <div className="h-7 w-7 shrink-0 rounded border border-[#FCE100]/20 bg-black/30 p-1">
+                  <ImageWithFallback
+                    src={item.icon_url}
+                    alt={item.name}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <span className="max-w-[180px] truncate text-xs">{item.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Expanded Panel */}
       {isExpanded && (

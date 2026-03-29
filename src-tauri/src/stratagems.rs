@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -20,6 +21,8 @@ pub struct StratagemCatalog {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stratagem {
+    #[serde(default)]
+    pub id: String,
     pub section: String,
     pub category: String,
     pub name: String,
@@ -74,7 +77,13 @@ pub async fn refresh_catalog(app_handle: &AppHandle) -> Result<StratagemCatalog,
     let catalog = StratagemCatalog {
         updated_at_unix: Some(current_unix_timestamp()),
         source_url: WIKI_PAGE_URL.to_string(),
-        items,
+        items: items
+            .into_iter()
+            .map(|item| Stratagem {
+                id: compute_stratagem_id(&item.command),
+                ..item
+            })
+            .collect(),
     };
 
     let cache_path = resolve_cache_path(app_handle)?;
@@ -86,7 +95,7 @@ pub async fn refresh_catalog(app_handle: &AppHandle) -> Result<StratagemCatalog,
 fn resolve_cache_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_handle
         .path()
-        .app_local_data_dir()
+        .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("stratagems.toml"))
 }
@@ -115,7 +124,21 @@ fn load_catalog_from_path(path: &Path) -> Result<StratagemCatalog, String> {
     let file_content = fs::read_to_string(path).map_err(|e| e.to_string())?;
 
     match toml::from_str::<StratagemCatalog>(&file_content) {
-        Ok(catalog) => Ok(catalog),
+        Ok(mut catalog) => {
+            let mut changed = false;
+            for item in &mut catalog.items {
+                if item.id.is_empty() {
+                    item.id = compute_stratagem_id(&item.command);
+                    changed = true;
+                }
+            }
+
+            if changed {
+                save_catalog_to_path(path, &catalog)?;
+            }
+
+            Ok(catalog)
+        }
         Err(error) => {
             log::warn!(
                 "Stratagem cache is invalid TOML, resetting cache file: {}",
@@ -127,6 +150,10 @@ fn load_catalog_from_path(path: &Path) -> Result<StratagemCatalog, String> {
             Ok(default_catalog)
         }
     }
+}
+
+fn compute_stratagem_id(command: &[String]) -> String {
+    STANDARD.encode(command.join(","))
 }
 
 async fn fetch_stratagem_page_html(client: &reqwest::Client) -> Result<String, String> {
@@ -251,6 +278,7 @@ fn parse_stratagem_table(table: &ElementRef<'_>, section: &str, category: &str) 
             }
 
             Some(Stratagem {
+                id: String::new(),
                 section: section.to_string(),
                 category: if category.is_empty() {
                     section.to_string()

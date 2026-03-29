@@ -1,6 +1,7 @@
 export type StratagemDirection = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
 export interface StratagemItem {
+  id: string;
   section: string;
   category: string;
   name: string;
