@@ -63,9 +63,13 @@ pub struct AudioRecognizer {
 
 impl Clone for AudioRecognizer {
     fn clone(&self) -> Self {
-        let recognizer =
+        let recognizer = if self.config.grammar.is_empty() {
+            Recognizer::new(&self.model, VOSK_SAMPLE_RATE)
+                .expect("Failed to create Vosk recognizer")
+        } else {
             Recognizer::new_with_grammar(&self.model, VOSK_SAMPLE_RATE, &self.config.grammar)
-                .expect("Failed to create Vosk recognizer");
+                .expect("Failed to create Vosk recognizer")
+        };
 
         Self {
             model: self.model.clone(),
@@ -84,8 +88,12 @@ impl AudioRecognizer {
     pub fn new(model_path: &str, config: AudioRecognizerConfig) -> Result<Self> {
         let model = Model::new(model_path)
             .with_context(|| format!("Failed to load Vosk model from {}", model_path))?;
-        let recognizer = Recognizer::new_with_grammar(&model, VOSK_SAMPLE_RATE, &config.grammar)
-            .context("Failed to create Vosk recognizer")?;
+        let recognizer = if config.grammar.is_empty() {
+            Recognizer::new(&model, VOSK_SAMPLE_RATE)
+        } else {
+            Recognizer::new_with_grammar(&model, VOSK_SAMPLE_RATE, &config.grammar)
+        }
+        .context("Failed to create Vosk recognizer")?;
 
         let samples_per_frame = VOSK_SAMPLE_RATE as usize * 20 / 1000;
         let vad_samples = 4 * samples_per_frame;

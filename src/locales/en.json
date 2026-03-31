@@ -11,7 +11,8 @@
     "offline": "OFFLINE",
     "linking": "LINKING...",
     "active": "LINK ACTIVE",
-    "restart_required": "Configuration changed. Restart Voice Link for the new settings to take effect."
+    "restart_required": "Configuration changed. Restart Voice Link for the new settings to take effect.",
+    "command_required": "Add at least one macro command before enabling Voice Link."
   },
   "macros": {
     "title": "VOICE COMMAND ARSENAL",

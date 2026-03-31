@@ -105,6 +105,10 @@ impl HellcallEngine {
             AUDIO_DIR.to_string()
         };
 
+        if config.commands.is_empty() {
+            return Err(anyhow!("at least one command must be configured"));
+        }
+
         // 初始化 KeyPresser 和 listener（首次创建或复用）
         let key_presser_config = config.key_presser.clone();
         let shortcut = config

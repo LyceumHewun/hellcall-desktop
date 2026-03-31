@@ -147,8 +147,16 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
   const isActive = status === "ACTIVE";
   const isStarting = status === "STARTING";
+  const validMacrosCount =
+    config?.commands.filter(
+      (commandConfig) =>
+        commandConfig.command.trim() !== "" && commandConfig.keys.length > 0,
+    ).length ?? 0;
+  const showCommandRequiredHint = validMacrosCount === 0;
   const isStartDisabled =
-    isStarting || (!isActive && selectedVoskModelReady === false);
+    isStarting ||
+    (!isActive && selectedVoskModelReady === false) ||
+    (!isActive && showCommandRequiredHint);
   const showRestartReminder =
     isActive &&
     currentEngineConfigSignature !== null &&
@@ -279,9 +287,15 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         ) : null}
 
         {selectedVoskModelReady === false && !isActive ? (
-          <p className="px-1 text-xs text-amber-300/80">
+          <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
             {t("settings.model_required")}
-          </p>
+          </div>
+        ) : null}
+
+        {showCommandRequiredHint ? (
+          <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+            {t("status.command_required")}
+          </div>
         ) : null}
       </div>
 
