@@ -11,7 +11,8 @@
     "offline": "离线",
     "linking": "连接中...",
     "active": "连接成功",
-    "restart_required": "检测到配置已变更，重启 Voice Link 引擎后才会生效。"
+    "restart_required": "检测到配置已变更，重启 Voice Link 引擎后才会生效。",
+    "command_required": "请至少添加一条宏命令后再启用 Voice Link。"
   },
   "macros": {
     "title": "语音指令库",
