@@ -204,6 +204,117 @@ export function GlobalSettingsView() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.mode")}</Label>
+                <Select
+                  value={config.mode}
+                  onValueChange={(val) =>
+                    updateConfig((c) => {
+                      c.mode = val as any;
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue placeholder={t("settings.mode_voice")} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="voice_command">
+                      {t("settings.mode_voice")}
+                    </SelectItem>
+                    <SelectItem value="ai_agent">
+                      {t("settings.mode_ai")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/45">
+                  {t("settings.mode_hint")}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#1E2128] border-white/10 text-white">
+            <CardHeader>
+              <CardTitle className="text-[#FCE100] font-bold">
+                {t("settings.ai")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>{t("settings.ai_base_url")}</Label>
+                <Input
+                  className="bg-black/30 border-white/10"
+                  value={config.ai.base_url}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.ai.base_url = e.target.value;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.ai_api_key")}</Label>
+                <Input
+                  type="password"
+                  className="bg-black/30 border-white/10"
+                  value={config.ai.api_key}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.ai.api_key = e.target.value;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.ai_chat_model")}</Label>
+                <Input
+                  className="bg-black/30 border-white/10"
+                  value={config.ai.default_chat_model}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.ai.default_chat_model = e.target.value;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("settings.ai_asr_model")}</Label>
+                <Input
+                  className="bg-black/30 border-white/10"
+                  value={config.ai.default_asr_model}
+                  onChange={(e) =>
+                    updateConfig((c) => {
+                      c.ai.default_asr_model = e.target.value;
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>{t("settings.ai_auto_execute")}</Label>
+                <div className="flex items-center justify-between space-x-4">
+                  <p className="text-sm text-white/50">
+                    {t("settings.ai_auto_execute_desc")}
+                  </p>
+                  <Switch
+                    className="border cursor-pointer"
+                    checked={config.ai.auto_execute_skills}
+                    onCheckedChange={(checked) =>
+                      updateConfig((c) => {
+                        c.ai.auto_execute_skills = checked;
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-white/45">
+                {t("settings.ai_ptt_hint")}
+              </p>
             </CardContent>
           </Card>
 

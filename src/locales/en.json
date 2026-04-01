@@ -1,5 +1,6 @@
 {
   "nav": {
+    "ai": "AI Agent",
     "macros": "Stratagem Macros",
     "keybindings": "Key Bindings",
     "stratagems": "Stratagems",
@@ -7,6 +8,8 @@
     "log": "Terminal Log"
   },
   "status": {
+    "ai_agent": "AI AGENT",
+    "ai_ready": "READY",
     "voice_link": "VOICE LINK",
     "offline": "OFFLINE",
     "linking": "LINKING...",
@@ -56,6 +59,18 @@
     "subtitle": "Tweak voice recognition and presser engine behaviors",
     "app_preferences": "App Preferences",
     "language": "Language",
+    "mode": "Global Mode",
+    "mode_voice": "Voice Command",
+    "mode_ai": "AI Agent",
+    "mode_hint": "Only one runtime mode is active at a time. AI mode reuses the existing Push-to-Talk binding.",
+    "ai": "AI",
+    "ai_base_url": "AI Base URL",
+    "ai_api_key": "AI API Key",
+    "ai_chat_model": "Default Chat Model",
+    "ai_asr_model": "Default ASR Model",
+    "ai_auto_execute": "Auto Execute Skills",
+    "ai_auto_execute_desc": "When enabled, AI tool calls will execute locally without an extra confirmation step.",
+    "ai_ptt_hint": "AI mode reuses the existing Push-to-Talk binding from Key Bindings.",
     "trigger": "Trigger",
     "hit_word": "Hit Word",
     "hit_word_grammar": "Hit Word Grammar",
@@ -117,6 +132,70 @@
   "log": {
     "waiting": "Waiting for logs...",
     "scroll_bottom": "↓ Scroll to bottom"
+  },
+  "ai": {
+    "title": "AI OPERATIONS",
+    "subtitle": "Voice-first agent mode with local tools and tactical session memory",
+    "new_session": "New Session",
+    "session_list": "Sessions",
+    "loading_sessions": "Loading local sessions...",
+    "empty_sessions": "No AI sessions yet. Start a new session to create the first local record.",
+    "session_meta": "Created {{created}} · Updated {{updated}}",
+    "loading_session": "Loading session details...",
+    "empty_conversation_title": "The conversation is ready.",
+    "empty_conversation_body": "Press and hold the shared Push-to-Talk key to record the first voice turn once the audio pipeline is wired in.",
+    "empty_event": "No text payload",
+    "select_or_create": "Select an existing session or create a new one from the left panel.",
+    "mode_locked_title": "AI mode is currently inactive.",
+    "mode_locked_body": "Switch the global mode to AI Agent to enable the AI workspace, session storage, and tool-capable runtime.",
+    "switch_mode": "Switch To AI Mode",
+    "mode_active": "AI mode is active",
+    "mode_active_hint": "Voice Link stays offline while the AI agent workspace is enabled.",
+    "ptt_title": "Push-to-Talk",
+    "ptt_body": "This mode reuses the existing global Push-to-Talk binding. Recording and transcription will attach here in the next implementation slice.",
+    "ptt_button": "Hold To Talk",
+    "ptt_button_recording": "Release To Send",
+    "latest_transcript": "Latest Transcript",
+    "streaming_label": "Assistant",
+    "streaming_status": "Streaming...",
+    "tabs": {
+      "conversation": "Conversation",
+      "agent": "Agent",
+      "skills": "Skills",
+      "models": "Models"
+    },
+    "errors": {
+      "sync_runtime": "Failed to sync the AI runtime.",
+      "start_recording": "Failed to start AI recording.",
+      "stop_recording": "Failed to stop AI recording.",
+      "start_chat": "Failed to start AI chat."
+    },
+    "agent": {
+      "title": "Agent",
+      "select": "Select an agent",
+      "name": "Agent Name",
+      "description": "Description",
+      "system_prompt": "System Prompt",
+      "temperature": "Temperature",
+      "max_tokens": "Max Tokens",
+      "enable_thinking": "Enable Thinking",
+      "enable_thinking_hint": "Reserve this for models or prompts that benefit from a slower, more reflective response path.",
+      "new_name": "New Agent",
+      "new_description": "Custom editable agent profile",
+      "new_prompt": "You are a helpful AI operator for Hellcall. Use tools when they are available and useful."
+    },
+    "skills": {
+      "title": "Skills",
+      "auto_execute": "Auto Execute",
+      "auto_execute_hint": "When enabled, tool calls execute immediately on this machine."
+    },
+    "models": {
+      "title": "Models",
+      "base_url": "Base URL",
+      "api_key": "API Key",
+      "chat_model": "Chat Model",
+      "asr_model": "ASR Model"
+    }
   },
   "stratagems": {
     "title": "Stratagems",

@@ -1,20 +1,29 @@
+mod ai;
 mod asset_manager;
 mod hellcall;
 mod stratagems;
 mod utils;
 
+use ai::session_store;
 use asset_manager::{vision_model_manager, vosk_model_manager};
+use hellcall::config::{AiConfig, MicrophoneConfig};
+use hellcall::core::keypress::{Input, KeyPresser, LocalKey};
 use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use hellcall::core::microphone::{
-    open_volume_meter_stream, validate_virtual_output_device_for_mix,
+    open_input_stream, open_volume_meter_stream, resolve_input_device_name,
+    run_processed_audio_pipeline, validate_virtual_output_device_for_mix,
 };
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{SystemTime, UNIX_EPOCH};
 use stratagems::StratagemCatalog;
+use serde_json::{json, Value};
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 
 enum AppEngine {
@@ -27,10 +36,84 @@ struct UnsafeStreamWrapper(cpal::Stream);
 unsafe impl Send for UnsafeStreamWrapper {}
 unsafe impl Sync for UnsafeStreamWrapper {}
 
+#[derive(Clone)]
+struct AiRuntimeConfig {
+    mode: hellcall::config::AppMode,
+    selected_device: Option<String>,
+    microphone_config: MicrophoneConfig,
+    ai_config: AiConfig,
+    key_map: HashMap<LocalKey, Input>,
+    key_presser_config: hellcall::core::keypress::KeyPresserConfig,
+    session_id: Option<String>,
+}
+
+impl Default for AiRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            mode: hellcall::config::AppMode::VoiceCommand,
+            selected_device: None,
+            microphone_config: MicrophoneConfig::default(),
+            ai_config: AiConfig::default(),
+            key_map: Config::default().key_map,
+            key_presser_config: hellcall::core::keypress::KeyPresserConfig::default(),
+            session_id: None,
+        }
+    }
+}
+
+struct AiRecordingCapture {
+    samples: Arc<Mutex<Vec<i16>>>,
+    stream: Option<UnsafeStreamWrapper>,
+    worker_handle: Option<JoinHandle<()>>,
+}
+
+struct AiHotkeyBridge {
+    key_presser: Arc<KeyPresser>,
+    listener_handle: Option<JoinHandle<()>>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiRecordingStatePayload {
+    recording: bool,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiChatStatePayload {
+    streaming: bool,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiTranscriptionEventPayload {
+    session_id: String,
+    transcript: String,
+    audio_path: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiErrorEventPayload {
+    message: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiChatDeltaPayload {
+    session_id: String,
+    delta: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiChatFinishedPayload {
+    session_id: String,
+    message: String,
+}
+
 struct AppState {
     engine: Mutex<AppEngine>,
     mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
     cached_vosk_runtime_model_paths: Mutex<HashMap<String, PathBuf>>,
+    ai_runtime: Mutex<AiRuntimeConfig>,
+    ai_recording: Mutex<Option<AiRecordingCapture>>,
+    ai_hotkey_bridge: Mutex<Option<AiHotkeyBridge>>,
+    ai_streaming: Mutex<bool>,
 }
 
 fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -93,6 +176,694 @@ fn resolve_cached_vosk_runtime_model_path(
     cache_guard.insert(cache_key.to_string(), resolved_path.clone());
 
     Ok(resolved_path)
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn resolve_ai_recordings_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("ai_recordings");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn write_pcm16_wav(path: &std::path::Path, sample_rate: u32, samples: &[i16]) -> Result<(), String> {
+    let channels: u16 = 1;
+    let bits_per_sample: u16 = 16;
+    let byte_rate = sample_rate * channels as u32 * (bits_per_sample as u32 / 8);
+    let block_align = channels * (bits_per_sample / 8);
+    let data_size = (samples.len() * std::mem::size_of::<i16>()) as u32;
+    let riff_size = 36 + data_size;
+
+    let mut file = fs::File::create(path).map_err(|e| e.to_string())?;
+    file.write_all(b"RIFF").map_err(|e| e.to_string())?;
+    file.write_all(&riff_size.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(b"WAVE").map_err(|e| e.to_string())?;
+    file.write_all(b"fmt ").map_err(|e| e.to_string())?;
+    file.write_all(&16u32.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&1u16.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&channels.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&sample_rate.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&byte_rate.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&block_align.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(&bits_per_sample.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    file.write_all(b"data").map_err(|e| e.to_string())?;
+    file.write_all(&data_size.to_le_bytes())
+        .map_err(|e| e.to_string())?;
+
+    for sample in samples {
+        file.write_all(&sample.to_le_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn create_session_if_missing(app_handle: &AppHandle, runtime: &mut AiRuntimeConfig) -> Result<String, String> {
+    if let Some(session_id) = runtime.session_id.clone().filter(|id| !id.trim().is_empty()) {
+        return Ok(session_id);
+    }
+
+    let session = session_store::create_session(app_handle, None)?;
+    runtime.session_id = Some(session.id.clone());
+    Ok(session.id)
+}
+
+fn emit_ai_recording_state(app_handle: &AppHandle, recording: bool) {
+    let _ = app_handle.emit(
+        "ai-recording-state",
+        AiRecordingStatePayload { recording },
+    );
+}
+
+fn emit_ai_error(app_handle: &AppHandle, message: impl Into<String>) {
+    let _ = app_handle.emit(
+        "ai-recording-error",
+        AiErrorEventPayload {
+            message: message.into(),
+        },
+    );
+}
+
+fn configure_ai_hotkey_bridge(
+    app_handle: &AppHandle,
+    state: &State<'_, AppState>,
+    config: &Config,
+) -> Result<(), String> {
+    let mut bridge_guard = state.ai_hotkey_bridge.lock().map_err(|e| e.to_string())?;
+
+    let ptt_input = if config.mode == hellcall::config::AppMode::AiAgent {
+        config.key_map.get(&LocalKey::PTT).cloned()
+    } else {
+        None
+    };
+
+    let key_presser = if let Some(bridge) = bridge_guard.as_mut() {
+        bridge
+            .key_presser
+            .update_config(config.key_presser.clone(), config.key_map.clone(), HashMap::new())
+            .map_err(|e| e.to_string())?;
+        bridge.key_presser.clear_listen_map();
+        Arc::clone(&bridge.key_presser)
+    } else {
+        let key_presser = Arc::new(
+            KeyPresser::new(
+                config.key_presser.clone(),
+                config.key_map.clone(),
+                HashMap::new(),
+            )
+            .map_err(|e| e.to_string())?,
+        );
+        let listener_key_presser = Arc::clone(&key_presser);
+        let listener_handle = std::thread::spawn(move || {
+            if let Err(error) = listener_key_presser.listen() {
+                log::error!("AI hotkey listener failed: {}", error);
+            }
+        });
+
+        bridge_guard.replace(AiHotkeyBridge {
+            key_presser: Arc::clone(&key_presser),
+            listener_handle: Some(listener_handle),
+        });
+        key_presser
+    };
+
+    if let Some(ptt_input) = ptt_input {
+        let app_handle_clone = app_handle.clone();
+        key_presser.listen_key(ptt_input, move |pressed, _push_fn| {
+            let app_handle = app_handle_clone.clone();
+            if pressed {
+                if let Err(error) = start_ai_recording_internal(&app_handle) {
+                    emit_ai_error(&app_handle, error);
+                }
+            } else {
+                std::thread::spawn(move || {
+                    let runtime = match app_handle.state::<AppState>().ai_runtime.lock() {
+                        Ok(guard) => guard.clone(),
+                        Err(error) => {
+                            emit_ai_error(&app_handle, error.to_string());
+                            return;
+                        }
+                    };
+
+                    if let Err(error) = stop_ai_recording_blocking(&app_handle, runtime) {
+                        emit_ai_error(&app_handle, error);
+                    }
+                });
+            }
+        });
+    }
+
+    Ok(())
+}
+
+fn start_ai_recording_internal(app_handle: &AppHandle) -> Result<(), String> {
+    use cpal::traits::StreamTrait;
+
+    let state = app_handle.state::<AppState>();
+    let mut recording_guard = state.ai_recording.lock().map_err(|e| e.to_string())?;
+    if recording_guard.is_some() {
+        return Ok(());
+    }
+
+    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+    let input_device_name =
+        resolve_input_device_name(runtime.selected_device).map_err(|e| e.to_string())?;
+    let microphone_input = open_input_stream(&input_device_name)
+        .map_err(|e| utils::format_and_log_error("Failed to open AI recording input stream", e))?;
+    let sample_rate = microphone_input.sample_rate;
+    let rx = microphone_input.rx;
+    let stream = microphone_input.stream;
+    stream
+        .play()
+        .map_err(|e| utils::format_and_log_error("Failed to start AI recording stream", e))?;
+
+    let samples = Arc::new(Mutex::new(Vec::new()));
+    let samples_ref = Arc::clone(&samples);
+    let enable_denoise = runtime.microphone_config.enable_denoise;
+    let worker_handle = std::thread::spawn(move || {
+        let result = run_processed_audio_pipeline(
+            rx,
+            sample_rate,
+            0.08,
+            enable_denoise,
+            None,
+            |chunk| {
+                let mut buffer = samples_ref.lock().map_err(|_| {
+                    anyhow::anyhow!("AI recording sample buffer was poisoned")
+                })?;
+                buffer.extend_from_slice(chunk);
+                Ok(())
+            },
+        );
+
+        if let Err(error) = result {
+            log::error!("AI recording pipeline failed: {}", error);
+        }
+    });
+
+    *recording_guard = Some(AiRecordingCapture {
+        samples,
+        stream: Some(UnsafeStreamWrapper(stream)),
+        worker_handle: Some(worker_handle),
+    });
+
+    emit_ai_recording_state(app_handle, true);
+    Ok(())
+}
+
+fn stop_ai_recording_blocking(
+    app_handle: &AppHandle,
+    runtime: AiRuntimeConfig,
+) -> Result<ai::client::AiTranscriptionResult, String> {
+    let state = app_handle.state::<AppState>();
+    let capture = {
+        let mut recording_guard = state.ai_recording.lock().map_err(|e| e.to_string())?;
+        recording_guard.take()
+    };
+
+    let Some(mut capture) = capture else {
+        return Err("AI recording is not active.".to_string());
+    };
+
+    capture.stream.take();
+    if let Some(worker_handle) = capture.worker_handle.take() {
+        let _ = worker_handle.join();
+    }
+
+    let samples = capture
+        .samples
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+
+    emit_ai_recording_state(app_handle, false);
+
+    if samples.is_empty() {
+        return Err("No microphone audio was captured.".to_string());
+    }
+
+    let recordings_dir = resolve_ai_recordings_dir(app_handle)?;
+    let audio_path = recordings_dir.join(format!("recording-{}.wav", now_ms()));
+    write_pcm16_wav(&audio_path, 16_000, &samples)?;
+
+    let transcript = tauri::async_runtime::block_on(ai::client::transcribe_audio(
+        &runtime.ai_config,
+        &audio_path,
+    ))?;
+
+    if transcript.is_empty() {
+        return Err("ASR returned an empty transcript.".to_string());
+    }
+
+    let session_id = {
+        let mut runtime_guard = state.ai_runtime.lock().map_err(|e| e.to_string())?;
+        create_session_if_missing(app_handle, &mut runtime_guard)?
+    };
+
+    session_store::append_event(
+        app_handle,
+        &session_id,
+        session_store::AiSessionEvent {
+            id: format!("event-{}", now_ms()),
+            kind: "user_transcript".to_string(),
+            text: Some(transcript.clone()),
+            created_at_ms: now_ms(),
+        },
+    )?;
+    session_store::maybe_promote_title_from_text(app_handle, &session_id, &transcript)?;
+
+    let result = ai::client::AiTranscriptionResult {
+        session_id: session_id.clone(),
+        transcript,
+        audio_path: utils::normalize_runtime_path(&audio_path),
+    };
+
+    let _ = app_handle.emit(
+        "ai-transcription-ready",
+        AiTranscriptionEventPayload {
+            session_id: result.session_id.clone(),
+            transcript: result.transcript.clone(),
+            audio_path: result.audio_path.clone(),
+        },
+    );
+
+    Ok(result)
+}
+
+fn emit_ai_chat_state(app_handle: &AppHandle, streaming: bool) {
+    let _ = app_handle.emit("ai-chat-state", AiChatStatePayload { streaming });
+}
+
+fn emit_ai_chat_delta(app_handle: &AppHandle, session_id: &str, delta: &str) {
+    let _ = app_handle.emit(
+        "ai-chat-delta",
+        AiChatDeltaPayload {
+            session_id: session_id.to_string(),
+            delta: delta.to_string(),
+        },
+    );
+}
+
+fn emit_ai_chat_finished(app_handle: &AppHandle, session_id: &str, message: &str) {
+    let _ = app_handle.emit(
+        "ai-chat-finished",
+        AiChatFinishedPayload {
+            session_id: session_id.to_string(),
+            message: message.to_string(),
+        },
+    );
+}
+
+fn parse_local_key(name: &str) -> Option<LocalKey> {
+    match name.trim().to_ascii_uppercase().as_str() {
+        "UP" => Some(LocalKey::UP),
+        "DOWN" => Some(LocalKey::DOWN),
+        "LEFT" => Some(LocalKey::LEFT),
+        "RIGHT" => Some(LocalKey::RIGHT),
+        "OPEN" => Some(LocalKey::OPEN),
+        "THROW" => Some(LocalKey::THROW),
+        "RESEND" => Some(LocalKey::RESEND),
+        "PTT" => Some(LocalKey::PTT),
+        "OCC" => Some(LocalKey::OCC),
+        _ => None,
+    }
+}
+
+fn build_skill_tools(agent: &hellcall::config::AiAgentConfig) -> Vec<Value> {
+    agent
+        .skill_ids
+        .iter()
+        .filter_map(|skill_id| match skill_id.as_str() {
+            "send_key_sequence" => Some(json!({
+                "type": "function",
+                "function": {
+                    "name": "send_key_sequence",
+                    "description": "Execute a local logical key sequence immediately.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "keys": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": ["UP","DOWN","LEFT","RIGHT","OPEN","THROW","RESEND","PTT","OCC"]
+                                }
+                            }
+                        },
+                        "required": ["keys"]
+                    }
+                }
+            })),
+            "execute_stratagem" => Some(json!({
+                "type": "function",
+                "function": {
+                    "name": "execute_stratagem",
+                    "description": "Execute a known stratagem by id or name using OPEN + directions + THROW.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "name": {"type": "string"}
+                        }
+                    }
+                }
+            })),
+            "list_stratagems" => Some(json!({
+                "type": "function",
+                "function": {
+                    "name": "list_stratagems",
+                    "description": "List known local stratagems and their direction sequences.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"}
+                        }
+                    }
+                }
+            })),
+            "get_key_mappings" => Some(json!({
+                "type": "function",
+                "function": {
+                    "name": "get_key_mappings",
+                    "description": "Return the current local logical-to-physical key mappings.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            })),
+            _ => None,
+        })
+        .collect()
+}
+
+fn build_chat_messages(
+    app_handle: &AppHandle,
+    session_id: &str,
+    agent: &hellcall::config::AiAgentConfig,
+) -> Result<Vec<Value>, String> {
+    let session = session_store::get_session(app_handle, session_id)?;
+    let mut messages = vec![json!({
+        "role": "system",
+        "content": agent.system_prompt
+    })];
+
+    for event in session.events {
+        match event.kind.as_str() {
+            "user_transcript" => {
+                if let Some(text) = event.text.filter(|text| !text.trim().is_empty()) {
+                    messages.push(json!({ "role": "user", "content": text }));
+                }
+            }
+            "assistant_final" => {
+                if let Some(text) = event.text.filter(|text| !text.trim().is_empty()) {
+                    messages.push(json!({ "role": "assistant", "content": text }));
+                }
+            }
+            "assistant_tool_calls" => {
+                if let Some(text) = event.text {
+                    let tool_calls: Vec<ai::client::ChatToolCall> =
+                        serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                    messages.push(json!({
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": tool_calls,
+                    }));
+                }
+            }
+            "tool_result" => {
+                if let Some(text) = event.text {
+                    let payload: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                    messages.push(json!({
+                        "role": "tool",
+                        "tool_call_id": payload["tool_call_id"],
+                        "name": payload["name"],
+                        "content": payload["content"],
+                    }));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(messages)
+}
+
+fn current_ai_agent(runtime: &AiRuntimeConfig) -> Result<hellcall::config::AiAgentConfig, String> {
+    runtime
+        .ai_config
+        .agents
+        .iter()
+        .find(|agent| agent.id == runtime.ai_config.default_agent_id)
+        .cloned()
+        .or_else(|| runtime.ai_config.agents.first().cloned())
+        .ok_or_else(|| "No AI agent is configured.".to_string())
+}
+
+fn execute_tool_call(
+    app_handle: &AppHandle,
+    state: &State<'_, AppState>,
+    tool_call: &ai::client::ChatToolCall,
+) -> Result<String, String> {
+    let args: Value = serde_json::from_str(&tool_call.function.arguments).map_err(|e| {
+        format!(
+            "Failed to parse tool arguments for {}: {}",
+            tool_call.function.name, e
+        )
+    })?;
+
+    match tool_call.function.name.as_str() {
+        "send_key_sequence" => {
+            let keys = args["keys"]
+                .as_array()
+                .ok_or_else(|| "send_key_sequence requires a keys array.".to_string())?
+                .iter()
+                .filter_map(|value| value.as_str())
+                .filter_map(parse_local_key)
+                .collect::<Vec<_>>();
+
+            if keys.is_empty() {
+                return Err("No valid local keys were provided.".to_string());
+            }
+
+            if let Some(bridge) = state.ai_hotkey_bridge.lock().map_err(|e| e.to_string())?.as_ref()
+            {
+                bridge.key_presser.enqueue(&keys, true);
+                return Ok(format!("Executed key sequence: {:?}", keys));
+            }
+
+            Err("AI hotkey bridge is unavailable.".to_string())
+        }
+        "execute_stratagem" => {
+            let catalog = stratagems::load_catalog(app_handle)?;
+            let wanted_id = args.get("id").and_then(Value::as_str).map(|s| s.to_string());
+            let wanted_name = args
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|s| s.to_ascii_lowercase());
+            let item = catalog.items.into_iter().find(|item| {
+                wanted_id.as_ref().is_some_and(|id| &item.id == id)
+                    || wanted_name
+                        .as_ref()
+                        .is_some_and(|name| item.name.to_ascii_lowercase() == *name)
+            });
+
+            let Some(item) = item else {
+                return Err("Requested stratagem was not found in the local catalog.".to_string());
+            };
+
+            let mut keys = vec![LocalKey::OPEN];
+            keys.extend(item.command.iter().filter_map(|step| parse_local_key(step)));
+            keys.push(LocalKey::THROW);
+
+            if let Some(bridge) = state.ai_hotkey_bridge.lock().map_err(|e| e.to_string())?.as_ref()
+            {
+                bridge.key_presser.enqueue(&keys, true);
+                return Ok(format!("Executed stratagem '{}' with sequence {:?}", item.name, keys));
+            }
+
+            Err("AI hotkey bridge is unavailable.".to_string())
+        }
+        "list_stratagems" => {
+            let catalog = stratagems::load_catalog(app_handle)?;
+            let query = args
+                .get("query")
+                .and_then(Value::as_str)
+                .map(|value| value.to_ascii_lowercase());
+            let items = catalog
+                .items
+                .into_iter()
+                .filter(|item| {
+                    query
+                        .as_ref()
+                        .is_none_or(|query| item.name.to_ascii_lowercase().contains(query))
+                })
+                .take(20)
+                .map(|item| {
+                    json!({
+                        "id": item.id,
+                        "name": item.name,
+                        "command": item.command,
+                        "category": item.category,
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(Value::Array(items).to_string())
+        }
+        "get_key_mappings" => {
+            let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+            let mappings = runtime
+                .key_map
+                .into_iter()
+                .map(|(local_key, input)| {
+                    let name = match local_key {
+                        LocalKey::UP => "UP",
+                        LocalKey::DOWN => "DOWN",
+                        LocalKey::LEFT => "LEFT",
+                        LocalKey::RIGHT => "RIGHT",
+                        LocalKey::OPEN => "OPEN",
+                        LocalKey::THROW => "THROW",
+                        LocalKey::RESEND => "RESEND",
+                        LocalKey::PTT => "PTT",
+                        LocalKey::OCC => "OCC",
+                    };
+                    json!({ "local_key": name, "input": format!("{:?}", input) })
+                })
+                .collect::<Vec<_>>();
+            Ok(Value::Array(mappings).to_string())
+        }
+        _ => Err(format!("Unsupported tool '{}'.", tool_call.function.name)),
+    }
+}
+
+fn append_tool_events(
+    app_handle: &AppHandle,
+    session_id: &str,
+    tool_calls: &[ai::client::ChatToolCall],
+    results: &[(String, String)],
+) -> Result<(), String> {
+    session_store::append_event(
+        app_handle,
+        session_id,
+        session_store::AiSessionEvent {
+            id: format!("event-{}", now_ms()),
+            kind: "assistant_tool_calls".to_string(),
+            text: Some(serde_json::to_string(tool_calls).map_err(|e| e.to_string())?),
+            created_at_ms: now_ms(),
+        },
+    )?;
+
+    for (tool_call_id, result) in results {
+        session_store::append_event(
+            app_handle,
+            session_id,
+            session_store::AiSessionEvent {
+                id: format!("event-{}", now_ms()),
+                kind: "tool_result".to_string(),
+                text: Some(
+                    json!({
+                        "tool_call_id": tool_call_id,
+                        "name": tool_calls
+                            .iter()
+                            .find(|call| &call.id == tool_call_id)
+                            .map(|call| call.function.name.clone())
+                            .unwrap_or_default(),
+                        "content": result,
+                    })
+                    .to_string(),
+                ),
+                created_at_ms: now_ms(),
+            },
+        )?;
+    }
+
+    Ok(())
+}
+
+async fn run_ai_chat_pipeline(
+    app_handle: AppHandle,
+    session_id: String,
+    runtime: AiRuntimeConfig,
+) -> Result<String, String> {
+    let state = app_handle.state::<AppState>();
+    let agent = current_ai_agent(&runtime)?;
+    let mut messages = build_chat_messages(&app_handle, &session_id, &agent)?;
+    let tools = build_skill_tools(&agent);
+
+    let mut iteration = 0usize;
+    loop {
+        iteration += 1;
+        if iteration > 4 {
+            return Err("AI tool loop exceeded the safety limit.".to_string());
+        }
+
+        let body = ai::client::build_chat_request_body(
+            &agent.chat_model,
+            messages.clone(),
+            tools.clone(),
+            agent.temperature,
+            agent.max_tokens,
+            true,
+        );
+
+        let mut streamed_text = String::new();
+        let stream_result = ai::client::stream_chat_completion(&runtime.ai_config, body, |delta| {
+            streamed_text.push_str(delta);
+            emit_ai_chat_delta(&app_handle, &session_id, delta);
+            Ok(())
+        })
+        .await?;
+
+        if !stream_result.tool_calls.is_empty() {
+            let mut tool_results = Vec::new();
+            for tool_call in &stream_result.tool_calls {
+                let result = execute_tool_call(&app_handle, &state, tool_call)?;
+                tool_results.push((tool_call.id.clone(), result));
+            }
+
+            append_tool_events(&app_handle, &session_id, &stream_result.tool_calls, &tool_results)?;
+            messages = build_chat_messages(&app_handle, &session_id, &agent)?;
+            continue;
+        }
+
+        let final_text = if stream_result.content.trim().is_empty() {
+            streamed_text
+        } else {
+            stream_result.content
+        };
+
+        if !final_text.trim().is_empty() {
+            session_store::append_event(
+                &app_handle,
+                &session_id,
+                session_store::AiSessionEvent {
+                    id: format!("event-{}", now_ms()),
+                    kind: "assistant_final".to_string(),
+                    text: Some(final_text.clone()),
+                    created_at_ms: now_ms(),
+                },
+            )?;
+        }
+
+        return Ok(final_text);
+    }
 }
 
 #[tauri::command]
@@ -367,6 +1138,106 @@ fn stop_mic_test(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn list_ai_sessions(app_handle: AppHandle) -> Result<Vec<session_store::AiSessionSummary>, String> {
+    session_store::list_sessions(&app_handle)
+}
+
+#[tauri::command]
+fn create_ai_session(
+    app_handle: AppHandle,
+    title: Option<String>,
+) -> Result<session_store::AiSessionSummary, String> {
+    session_store::create_session(&app_handle, title)
+}
+
+#[tauri::command]
+fn get_ai_session(
+    app_handle: AppHandle,
+    session_id: String,
+) -> Result<session_store::AiSessionRecord, String> {
+    session_store::get_session(&app_handle, &session_id)
+}
+
+#[tauri::command]
+fn delete_ai_session(app_handle: AppHandle, session_id: String) -> Result<bool, String> {
+    session_store::delete_session(&app_handle, &session_id)
+}
+
+#[tauri::command]
+fn sync_ai_runtime(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    config: Config,
+    device_name: Option<String>,
+    session_id: Option<String>,
+) -> Result<(), String> {
+    {
+        let mut runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?;
+        runtime.mode = config.mode.clone();
+        runtime.selected_device = device_name;
+        runtime.microphone_config = config.microphone.clone();
+        runtime.ai_config = config.ai.clone();
+        runtime.key_map = config.key_map.clone();
+        runtime.key_presser_config = config.key_presser.clone();
+        runtime.session_id = session_id;
+    }
+
+    configure_ai_hotkey_bridge(&app_handle, &state, &config)
+}
+
+#[tauri::command]
+fn start_ai_recording(app_handle: AppHandle) -> Result<(), String> {
+    start_ai_recording_internal(&app_handle)
+}
+
+#[tauri::command]
+fn stop_ai_recording(app_handle: AppHandle) -> Result<ai::client::AiTranscriptionResult, String> {
+    let runtime = app_handle
+        .state::<AppState>()
+        .ai_runtime
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    stop_ai_recording_blocking(&app_handle, runtime)
+}
+
+#[tauri::command]
+fn start_ai_chat_stream(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    {
+        let mut streaming = state.ai_streaming.lock().map_err(|e| e.to_string())?;
+        if *streaming {
+            return Err("AI chat is already streaming.".to_string());
+        }
+        *streaming = true;
+    }
+
+    emit_ai_chat_state(&app_handle, true);
+    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+    let app_handle_clone = app_handle.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let result = run_ai_chat_pipeline(app_handle_clone.clone(), session_id.clone(), runtime).await;
+
+        if let Err(error) = result {
+            emit_ai_error(&app_handle_clone, error);
+        } else if let Ok(message) = result {
+            emit_ai_chat_finished(&app_handle_clone, &session_id, &message);
+        }
+
+        if let Ok(mut streaming) = app_handle_clone.state::<AppState>().ai_streaming.lock() {
+            *streaming = false;
+        }
+        emit_ai_chat_state(&app_handle_clone, false);
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -394,6 +1265,10 @@ pub fn run() {
             engine: Mutex::new(AppEngine::None),
             mic_test_stream: Mutex::new(None),
             cached_vosk_runtime_model_paths: Mutex::new(HashMap::new()),
+            ai_runtime: Mutex::new(AiRuntimeConfig::default()),
+            ai_recording: Mutex::new(None),
+            ai_hotkey_bridge: Mutex::new(None),
+            ai_streaming: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
@@ -411,6 +1286,14 @@ pub fn run() {
             load_stratagems,
             refresh_stratagems,
             save_config,
+            list_ai_sessions,
+            create_ai_session,
+            get_ai_session,
+            delete_ai_session,
+            sync_ai_runtime,
+            start_ai_recording,
+            stop_ai_recording,
+            start_ai_chat_stream,
             start_engine,
             stop_engine
         ])

@@ -1,5 +1,6 @@
 {
   "nav": {
+    "ai": "AI 助手",
     "macros": "宏命令",
     "keybindings": "按键绑定",
     "stratagems": "战备",
@@ -7,6 +8,8 @@
     "log": "终端日志"
   },
   "status": {
+    "ai_agent": "AI AGENT",
+    "ai_ready": "已就绪",
     "voice_link": "VOICE LINK",
     "offline": "离线",
     "linking": "连接中...",
@@ -56,6 +59,18 @@
     "subtitle": "调整语音识别与按键引擎行为",
     "app_preferences": "应用偏好",
     "language": "语言 / Language",
+    "mode": "全局模式",
+    "mode_voice": "语音命令",
+    "mode_ai": "AI 助手",
+    "mode_hint": "运行时只能启用一种模式。AI 模式会复用现有的按键说话绑定。",
+    "ai": "AI",
+    "ai_base_url": "AI 接口地址",
+    "ai_api_key": "AI API Key",
+    "ai_chat_model": "默认聊天模型",
+    "ai_asr_model": "默认 ASR 模型",
+    "ai_auto_execute": "自动执行 Skill",
+    "ai_auto_execute_desc": "开启后，AI 触发的工具调用会直接在本地执行，不再额外确认。",
+    "ai_ptt_hint": "AI 模式直接复用“按键绑定”页面里的按键说话配置。",
     "trigger": "Trigger",
     "hit_word": "唤醒词",
     "hit_word_grammar": "唤醒词语法",
@@ -117,6 +132,70 @@
   "log": {
     "waiting": "等待日志...",
     "scroll_bottom": "↓ 滚动到底部"
+  },
+  "ai": {
+    "title": "AI 作战台",
+    "subtitle": "语音优先的 Agent 模式，带本地 Skill 与会话存档",
+    "new_session": "新建会话",
+    "session_list": "会话列表",
+    "loading_sessions": "正在加载本地会话...",
+    "empty_sessions": "还没有 AI 会话，先新建一个本地会话。",
+    "session_meta": "创建于 {{created}} · 更新于 {{updated}}",
+    "loading_session": "正在加载会话详情...",
+    "empty_conversation_title": "当前会话已准备好。",
+    "empty_conversation_body": "等下一阶段录音链路接入后，就可以按住现有 PTT 开始第一轮语音交互。",
+    "empty_event": "暂无文本内容",
+    "select_or_create": "从左侧选择已有会话，或先新建一个会话。",
+    "mode_locked_title": "AI 模式当前未启用。",
+    "mode_locked_body": "切换到 AI 助手模式后，才会启用 AI 工作台、本地会话和工具调用能力。",
+    "switch_mode": "切换到 AI 模式",
+    "mode_active": "AI 模式已启用",
+    "mode_active_hint": "AI 工作台启用期间，Voice Link 语音命令引擎保持离线。",
+    "ptt_title": "按键说话",
+    "ptt_body": "这里会复用现有的全局 PTT 绑定。下一阶段会把录音与转写链路挂到这里。",
+    "ptt_button": "按住说话",
+    "ptt_button_recording": "松开发送",
+    "latest_transcript": "最近一次转写",
+    "streaming_label": "助手",
+    "streaming_status": "生成中...",
+    "tabs": {
+      "conversation": "会话",
+      "agent": "Agent",
+      "skills": "Skills",
+      "models": "模型"
+    },
+    "errors": {
+      "sync_runtime": "同步 AI 运行时失败。",
+      "start_recording": "启动 AI 录音失败。",
+      "stop_recording": "停止 AI 录音失败。",
+      "start_chat": "启动 AI 对话失败。"
+    },
+    "agent": {
+      "title": "Agent",
+      "select": "选择 Agent",
+      "name": "Agent 名称",
+      "description": "描述",
+      "system_prompt": "系统提示词",
+      "temperature": "温度",
+      "max_tokens": "最大 Token",
+      "enable_thinking": "启用深度思考",
+      "enable_thinking_hint": "适合需要更慢、更谨慎回答风格的模型或提示词。",
+      "new_name": "新 Agent",
+      "new_description": "可编辑的自定义助手配置",
+      "new_prompt": "你是 Hellcall 的 AI 操作助手。请在合适时使用工具，不要编造工具执行结果。"
+    },
+    "skills": {
+      "title": "Skills",
+      "auto_execute": "自动执行",
+      "auto_execute_hint": "开启后，工具调用会立刻在本机执行。"
+    },
+    "models": {
+      "title": "模型配置",
+      "base_url": "接口地址",
+      "api_key": "API Key",
+      "chat_model": "聊天模型",
+      "asr_model": "ASR 模型"
+    }
   },
   "stratagems": {
     "title": "战备指令库",

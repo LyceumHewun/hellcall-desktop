@@ -9,6 +9,7 @@ import { KeyBindingsView } from "./views/KeyBindingsView";
 import { MacrosView } from "./views/MacrosView";
 import { LogView } from "./views/LogView";
 import { StratagemsView } from "./views/StratagemsView";
+import { AIView } from "./views/AIView";
 import { Toaster } from "sonner";
 import { useConfigStore } from "../store/configStore";
 
@@ -45,6 +46,20 @@ export default function App() {
     }
   }, [isLoading, config]);
 
+  useEffect(() => {
+    if (!config) {
+      return;
+    }
+
+    if (config.mode === "ai_agent" && activeNav === "macros") {
+      setActiveNav("ai");
+    }
+
+    if (config.mode === "voice_command" && activeNav === "ai") {
+      setActiveNav("macros");
+    }
+  }, [activeNav, config]);
+
   if (isLoading || !config) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#0F1115]">
@@ -70,6 +85,7 @@ export default function App() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Views */}
+          {activeNav === "ai" && <AIView />}
           {activeNav === "macros" && <MacrosView />}
           {activeNav === "stratagems" && <StratagemsView />}
           {activeNav === "settings" && <GlobalSettingsView />}

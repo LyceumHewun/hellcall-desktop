@@ -28,7 +28,7 @@ tauri-plugin-single-instance = "2.0.0"
 tauri-plugin-log = "2.8.0"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["stream"] }
+reqwest = { version = "0.12", features = ["stream", "multipart", "json"] }
 futures-util = "0.3"
 zip = { version = "8.4.0", default-features = false, features = ["deflate"] }
 sevenz-rust = { version = "0.6.1", default-features = false }

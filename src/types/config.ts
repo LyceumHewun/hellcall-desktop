@@ -1,4 +1,29 @@
 export type TalkMode = "push_to_talk" | "voice_activation";
+export type AppMode = "voice_command" | "ai_agent";
+
+export interface AiAgentConfig {
+  id: string;
+  name: string;
+  description: string;
+  system_prompt: string;
+  chat_model: string;
+  temperature: number;
+  max_tokens: number;
+  enable_thinking: boolean;
+  skill_ids: string[];
+  is_builtin: boolean;
+}
+
+export interface AiConfig {
+  provider: string;
+  base_url: string;
+  api_key: string;
+  default_chat_model: string;
+  default_asr_model: string;
+  auto_execute_skills: boolean;
+  default_agent_id: string;
+  agents: AiAgentConfig[];
+}
 
 export interface RecognizerConfig {
   chunk_time: number;
@@ -47,6 +72,8 @@ export interface SpeakerConfig {
 }
 
 export interface AppConfig {
+  mode: AppMode;
+  ai: AiConfig;
   vision: VisionConfig;
   microphone: MicrophoneConfig;
   speaker: SpeakerConfig;

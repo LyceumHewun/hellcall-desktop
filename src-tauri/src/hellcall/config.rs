@@ -46,6 +46,30 @@ fn default_microphone_enable_denoise() -> bool {
     false
 }
 
+fn default_ai_provider() -> String {
+    "siliconflow".to_string()
+}
+
+fn default_ai_base_url() -> String {
+    "https://api.siliconflow.cn/v1".to_string()
+}
+
+fn default_ai_chat_model() -> String {
+    "deepseek-ai/DeepSeek-V3.2".to_string()
+}
+
+fn default_ai_asr_model() -> String {
+    "FunAudioLLM/SenseVoiceSmall".to_string()
+}
+
+fn default_ai_agent_id() -> String {
+    "tactical-assistant".to_string()
+}
+
+fn default_ai_auto_execute_skills() -> bool {
+    true
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VisionConfig {
     #[serde(default)]
@@ -68,6 +92,10 @@ impl Default for VisionConfig {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(default)]
 pub struct Config {
+    #[serde(default)]
+    pub mode: AppMode,
+    #[serde(default)]
+    pub ai: AiConfig,
     #[serde(default)]
     pub vision: VisionConfig,
     #[serde(default)]
@@ -92,6 +120,51 @@ pub struct Config {
     pub key_map: HashMap<LocalKey, Input>,
     pub trigger: TriggerConfig,
     pub commands: Vec<CommandConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum AppMode {
+    #[serde(rename = "voice_command")]
+    #[default]
+    VoiceCommand,
+    #[serde(rename = "ai_agent")]
+    AiAgent,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiConfig {
+    #[serde(default = "default_ai_provider")]
+    pub provider: String,
+    #[serde(default = "default_ai_base_url")]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_ai_chat_model")]
+    pub default_chat_model: String,
+    #[serde(default = "default_ai_asr_model")]
+    pub default_asr_model: String,
+    #[serde(default = "default_ai_auto_execute_skills")]
+    pub auto_execute_skills: bool,
+    #[serde(default = "default_ai_agent_id")]
+    pub default_agent_id: String,
+    #[serde(default = "default_ai_agents")]
+    pub agents: Vec<AiAgentConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiAgentConfig {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub system_prompt: String,
+    pub chat_model: String,
+    pub temperature: f32,
+    pub max_tokens: u32,
+    pub enable_thinking: bool,
+    pub skill_ids: Vec<String>,
+    pub is_builtin: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -163,6 +236,8 @@ pub struct CommandConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            mode: AppMode::default(),
+            ai: AiConfig::default(),
             vision: VisionConfig::default(),
             microphone: MicrophoneConfig::default(),
             speaker: SpeakerConfig::default(),
@@ -178,6 +253,47 @@ impl Default for Config {
             ]),
             trigger: TriggerConfig::default(),
             commands: Vec::new(),
+        }
+    }
+}
+
+fn default_ai_agents() -> Vec<AiAgentConfig> {
+    vec![AiAgentConfig::default()]
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_ai_provider(),
+            base_url: default_ai_base_url(),
+            api_key: String::new(),
+            default_chat_model: default_ai_chat_model(),
+            default_asr_model: default_ai_asr_model(),
+            auto_execute_skills: default_ai_auto_execute_skills(),
+            default_agent_id: default_ai_agent_id(),
+            agents: default_ai_agents(),
+        }
+    }
+}
+
+impl Default for AiAgentConfig {
+    fn default() -> Self {
+        Self {
+            id: default_ai_agent_id(),
+            name: "战术副官".to_string(),
+            description: "简洁、执行优先的全局作战助手".to_string(),
+            system_prompt: "你是 Hellcall 的战术副官。优先用简洁中文回答；当用户明确要求执行战备、输入方向指令或触发本地动作时，优先调用可用工具完成任务；不要编造工具执行结果。".to_string(),
+            chat_model: default_ai_chat_model(),
+            temperature: 0.7,
+            max_tokens: 2048,
+            enable_thinking: false,
+            skill_ids: vec![
+                "send_key_sequence".to_string(),
+                "execute_stratagem".to_string(),
+                "list_stratagems".to_string(),
+                "get_key_mappings".to_string(),
+            ],
+            is_builtin: true,
         }
     }
 }

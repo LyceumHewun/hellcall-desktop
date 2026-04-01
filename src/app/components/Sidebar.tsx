@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import {
+  Bot,
   Settings,
   Keyboard,
   Command,
@@ -147,6 +148,7 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
   const isActive = status === "ACTIVE";
   const isStarting = status === "STARTING";
+  const isAiMode = config?.mode === "ai_agent";
   const validMacrosCount =
     config?.commands.filter(
       (commandConfig) =>
@@ -165,59 +167,90 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
   return (
     <div className="w-64 bg-[#0F1115] border-r border-white/10 flex flex-col p-4 gap-6">
-      {/* Status Toggle */}
-      <button
-        onClick={toggleEngine}
-        disabled={isStartDisabled}
-        className={`relative overflow-hidden transition-all duration-300 cursor-pointer border-2 rounded p-4 group disabled:opacity-80 disabled:hover:scale-100 disabled:cursor-not-allowed ${
-          isActive || isStarting
-            ? "bg-[#FCE100] border-[#FCE100] shadow-[0_0_20px_rgba(252,225,0,0.3)]"
-            : "bg-transparent border-white/20 hover:border-[#FCE100]/50 hover:bg-white/5 active:scale-[0.98]"
-        } ${isStarting ? "animate-pulse" : ""}`}
-      >
-        <div
-          className={`absolute inset-0 transition-opacity duration-1000 ${
-            isActive || isStarting ? "opacity-100" : "opacity-0"
-          }`}
-          style={{
-            background:
-              "radial-gradient(circle at center, rgba(252, 225, 0, 0.2) 0%, transparent 70%)",
-            animation: isActive ? "pulse 2s ease-in-out infinite" : "none",
-          }}
-        />
-        <div className="relative flex flex-col items-center gap-2">
-          <div
-            className={`w-3 h-3 rounded-full transition-all duration-300 ${
-              isActive || isStarting
-                ? "bg-black"
-                : "bg-[#FCE100]/50 group-hover:bg-[#FCE100] group-hover:shadow-[0_0_10px_rgba(252,225,0,0.5)]"
-            }`}
-          />
-          <span
-            style={{ fontFamily: "var(--font-family-tech)" }}
-            className={`tracking-wider ${
-              isActive || isStarting ? "text-black" : "text-white/70"
-            }`}
-          >
-            {t("status.voice_link")}
-          </span>
-          <span
-            style={{ fontFamily: "var(--font-family-tech)" }}
-            className={`tracking-wider ${
-              isActive || isStarting ? "text-black" : "text-white/50"
-            }`}
-          >
-            {isStarting
-              ? t("status.linking")
-              : isActive
-                ? t("status.active")
-                : t("status.offline")}
-          </span>
+      {isAiMode ? (
+        <div className="rounded border border-[#FCE100]/30 bg-[#FCE100]/10 p-4">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <Bot className="h-5 w-5 text-[#FCE100]" />
+            <span
+              style={{ fontFamily: "var(--font-family-tech)" }}
+              className="tracking-wider text-[#FCE100]"
+            >
+              {t("status.ai_agent")}
+            </span>
+            <span
+              style={{ fontFamily: "var(--font-family-tech)" }}
+              className="tracking-wider text-white/60"
+            >
+              {t("status.ai_ready")}
+            </span>
+          </div>
         </div>
-      </button>
+      ) : (
+        <button
+          onClick={toggleEngine}
+          disabled={isStartDisabled}
+          className={`relative overflow-hidden transition-all duration-300 cursor-pointer border-2 rounded p-4 group disabled:opacity-80 disabled:hover:scale-100 disabled:cursor-not-allowed ${
+            isActive || isStarting
+              ? "bg-[#FCE100] border-[#FCE100] shadow-[0_0_20px_rgba(252,225,0,0.3)]"
+              : "bg-transparent border-white/20 hover:border-[#FCE100]/50 hover:bg-white/5 active:scale-[0.98]"
+          } ${isStarting ? "animate-pulse" : ""}`}
+        >
+          <div
+            className={`absolute inset-0 transition-opacity duration-1000 ${
+              isActive || isStarting ? "opacity-100" : "opacity-0"
+            }`}
+            style={{
+              background:
+                "radial-gradient(circle at center, rgba(252, 225, 0, 0.2) 0%, transparent 70%)",
+              animation: isActive ? "pulse 2s ease-in-out infinite" : "none",
+            }}
+          />
+          <div className="relative flex flex-col items-center gap-2">
+            <div
+              className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                isActive || isStarting
+                  ? "bg-black"
+                  : "bg-[#FCE100]/50 group-hover:bg-[#FCE100] group-hover:shadow-[0_0_10px_rgba(252,225,0,0.5)]"
+              }`}
+            />
+            <span
+              style={{ fontFamily: "var(--font-family-tech)" }}
+              className={`tracking-wider ${
+                isActive || isStarting ? "text-black" : "text-white/70"
+              }`}
+            >
+              {t("status.voice_link")}
+            </span>
+            <span
+              style={{ fontFamily: "var(--font-family-tech)" }}
+              className={`tracking-wider ${
+                isActive || isStarting ? "text-black" : "text-white/50"
+              }`}
+            >
+              {isStarting
+                ? t("status.linking")
+                : isActive
+                  ? t("status.active")
+                  : t("status.offline")}
+            </span>
+          </div>
+        </button>
+      )}
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1">
+        <button
+          onClick={() => setActiveNav("ai")}
+          className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+            activeNav === "ai"
+              ? "bg-white/10 text-white"
+              : "text-white/60 hover:bg-white/5 hover:text-white/80"
+          }`}
+        >
+          <Bot className="w-4 h-4" />
+          <span>{t("nav.ai")}</span>
+        </button>
+
         <button
           onClick={() => setActiveNav("macros")}
           className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
@@ -286,13 +319,13 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
           </div>
         ) : null}
 
-        {selectedVoskModelReady === false && !isActive ? (
+        {selectedVoskModelReady === false && !isActive && !isAiMode ? (
           <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
             {t("settings.model_required")}
           </div>
         ) : null}
 
-        {showCommandRequiredHint ? (
+        {showCommandRequiredHint && !isAiMode ? (
           <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
             {t("status.command_required")}
           </div>
