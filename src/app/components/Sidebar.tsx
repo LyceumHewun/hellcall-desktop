@@ -168,18 +168,28 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   return (
     <div className="w-64 bg-[#0F1115] border-r border-white/10 flex flex-col p-4 gap-6">
       {isAiMode ? (
-        <div className="rounded border border-[#FCE100]/30 bg-[#FCE100]/10 p-4">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <Bot className="h-5 w-5 text-[#FCE100]" />
+        <div className="relative overflow-hidden rounded border-2 border-[#FCE100] bg-[#FCE100] p-4 shadow-[0_0_20px_rgba(252,225,0,0.3)]">
+          <div
+            className="absolute inset-0 opacity-100"
+            style={{
+              background:
+                "radial-gradient(circle at center, rgba(252, 225, 0, 0.2) 0%, transparent 70%)",
+              animation: "pulse 2s ease-in-out infinite",
+            }}
+          />
+          <div className="relative flex flex-col items-center gap-2 text-center">
+            <div className="flex h-3 items-center justify-center overflow-visible">
+              <Bot className="h-5 w-5 text-black" />
+            </div>
             <span
               style={{ fontFamily: "var(--font-family-tech)" }}
-              className="tracking-wider text-[#FCE100]"
+              className="tracking-wider text-black"
             >
               {t("status.ai_agent")}
             </span>
             <span
               style={{ fontFamily: "var(--font-family-tech)" }}
-              className="tracking-wider text-white/60"
+              className="tracking-wider text-black"
             >
               {t("status.ai_ready")}
             </span>
@@ -239,17 +249,19 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1">
-        <button
-          onClick={() => setActiveNav("ai")}
-          className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
-            activeNav === "ai"
-              ? "bg-white/10 text-white"
-              : "text-white/60 hover:bg-white/5 hover:text-white/80"
-          }`}
-        >
-          <Bot className="w-4 h-4" />
-          <span>{t("nav.ai")}</span>
-        </button>
+        {isAiMode ? (
+          <button
+            onClick={() => setActiveNav("ai")}
+            className={`flex items-center gap-3 px-4 py-3 rounded transition-colors ${
+              activeNav === "ai"
+                ? "bg-white/10 text-white"
+                : "text-white/60 hover:bg-white/5 hover:text-white/80"
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+            <span>{t("nav.ai")}</span>
+          </button>
+        ) : null}
 
         <button
           onClick={() => setActiveNav("macros")}

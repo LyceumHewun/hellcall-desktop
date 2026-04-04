@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Bot, Plus, Trash2, Waves } from "lucide-react";
+import { Plus, Trash2, Waves } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useConfigStore } from "../../store/configStore";
 import { useAiStore } from "../../store/aiStore";
 import { useEngineStore } from "../../store/engineStore";
+import { AiLiveToolActivity, AiSessionEvent } from "../../types/ai";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { ScrollArea } from "../components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -34,19 +34,154 @@ function formatTimestamp(value: number) {
   return new Date(value).toLocaleString();
 }
 
+function formatStructuredText(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function parseToolCalls(event: AiSessionEvent) {
+  if (event.kind !== "assistant_tool_calls" || !event.text) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(event.text) as Array<{
+      id?: string;
+      function?: { name?: string; arguments?: string };
+    }>;
+  } catch {
+    return [];
+  }
+}
+
+function parseToolResult(event: AiSessionEvent) {
+  if (event.kind !== "tool_result" || !event.text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(event.text) as {
+      tool_call_id?: string;
+      name?: string;
+      content?: string;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function renderEventSummary(event: AiSessionEvent) {
+  if (!event.text) {
+    return "";
+  }
+
+  if (event.kind === "assistant_tool_calls") {
+    try {
+      const parsed = JSON.parse(event.text) as Array<{
+        function?: { name?: string; arguments?: string };
+      }>;
+      return parsed
+        .map((item) => item.function?.name || "tool")
+        .filter(Boolean)
+        .join(", ");
+    } catch {
+      return event.text;
+    }
+  }
+
+  if (event.kind === "tool_result") {
+    try {
+      const parsed = JSON.parse(event.text) as {
+        name?: string;
+        content?: string;
+      };
+      return parsed.content || parsed.name || event.text;
+    } catch {
+      return event.text;
+    }
+  }
+
+  return event.text;
+}
+
+function eventTitle(kind: string, t: (key: string) => string) {
+  switch (kind) {
+    case "user_transcript":
+      return t("ai.events.user");
+    case "assistant_final":
+      return t("ai.events.assistant");
+    case "assistant_tool_calls":
+      return t("ai.events.tool_call");
+    case "tool_result":
+      return t("ai.events.tool_result");
+    default:
+      return kind;
+  }
+}
+
+function eventClasses(kind: string) {
+  switch (kind) {
+    case "user_transcript":
+      return "border-sky-400/25 bg-sky-400/8";
+    case "assistant_final":
+      return "border-white/10 bg-black/20";
+    case "assistant_tool_calls":
+      return "border-[#FCE100]/30 bg-[#FCE100]/10";
+    case "tool_result":
+      return "border-emerald-400/25 bg-emerald-400/8";
+    default:
+      return "border-white/10 bg-black/20";
+  }
+}
+
+function toolPhaseClasses(phase: AiLiveToolActivity["phase"]) {
+  switch (phase) {
+    case "call":
+      return "border-[#FCE100]/30 bg-[#FCE100]/10";
+    case "result":
+      return "border-emerald-400/25 bg-emerald-400/8";
+    case "error":
+      return "border-red-500/30 bg-red-500/10";
+    default:
+      return "border-white/10 bg-black/20";
+  }
+}
+
+function toolPhaseLabel(
+  phase: AiLiveToolActivity["phase"],
+  t: (key: string) => string,
+) {
+  switch (phase) {
+    case "call":
+      return t("ai.tool_phases.call");
+    case "result":
+      return t("ai.tool_phases.result");
+    case "error":
+      return t("ai.tool_phases.error");
+    default:
+      return phase;
+  }
+}
+
 export function AIView() {
   const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
   const selectedDevice = useEngineStore((state) => state.selectedDevice);
   const {
-    sessions,
     currentSessionId,
     currentSession,
+    liveToolActivities,
     isRecording,
     isStreaming,
     streamingText,
     lastTranscript,
-    isLoadingSessions,
     isLoadingSession,
     error,
     setError,
@@ -55,17 +190,16 @@ export function AIView() {
     setStreaming,
     appendStreamingText,
     resetStreamingText,
+    pushLiveToolActivity,
+    resetLiveToolActivities,
     setLastTranscript,
-    fetchSessions,
-    selectSession,
-    createSession,
-    deleteSession,
+    fetchSession,
   } = useAiStore();
   const isManualHoldRef = useRef(false);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    fetchSession();
+  }, [fetchSession]);
 
   useEffect(() => {
     if (!config) {
@@ -94,6 +228,7 @@ export function AIView() {
     let unlistenChatState: UnlistenFn | null = null;
     let unlistenChatDelta: UnlistenFn | null = null;
     let unlistenChatFinished: UnlistenFn | null = null;
+    let unlistenToolEvent: UnlistenFn | null = null;
 
     const recordingPromise = listen<{ recording: boolean }>(
       "ai-recording-state",
@@ -119,9 +254,9 @@ export function AIView() {
 
       setLastTranscript(event.payload.transcript);
       clearError();
-      await fetchSessions();
-      await selectSession(event.payload.session_id);
+      await fetchSession();
       resetStreamingText();
+      resetLiveToolActivities();
       await invoke("start_ai_chat_stream", {
         sessionId: event.payload.session_id,
       }).catch((chatError) => {
@@ -156,7 +291,7 @@ export function AIView() {
       }
       setStreaming(event.payload.streaming);
       if (!event.payload.streaming) {
-        fetchSessions().catch(console.error);
+        fetchSession().catch(console.error);
       }
     }).then((fn) => {
       unlistenChatState = fn;
@@ -178,15 +313,30 @@ export function AIView() {
 
     const chatFinishedPromise = listen<{ session_id: string; message: string }>(
       "ai-chat-finished",
-      async (event) => {
+      async () => {
         if (!mounted) {
           return;
         }
-        await fetchSessions();
-        await selectSession(event.payload.session_id);
+        await fetchSession();
       },
     ).then((fn) => {
       unlistenChatFinished = fn;
+      return fn;
+    });
+
+    const toolEventPromise = listen<{
+      id: string;
+      session_id: string;
+      phase: "call" | "result" | "error";
+      name: string;
+      summary: string;
+    }>("ai-tool-event", (event) => {
+      if (!mounted || event.payload.session_id !== currentSessionId) {
+        return;
+      }
+      pushLiveToolActivity(event.payload);
+    }).then((fn) => {
+      unlistenToolEvent = fn;
       return fn;
     });
 
@@ -222,14 +372,20 @@ export function AIView() {
       } else {
         chatFinishedPromise.then((fn) => fn());
       }
+      if (unlistenToolEvent) {
+        unlistenToolEvent();
+      } else {
+        toolEventPromise.then((fn) => fn());
+      }
     };
   }, [
     appendStreamingText,
     clearError,
     currentSessionId,
-    fetchSessions,
+    fetchSession,
+    pushLiveToolActivity,
     resetStreamingText,
-    selectSession,
+    resetLiveToolActivities,
     setError,
     setLastTranscript,
     setRecording,
@@ -248,6 +404,7 @@ export function AIView() {
     try {
       clearError();
       resetStreamingText();
+      resetLiveToolActivities();
       await invoke("start_ai_recording");
     } catch (recordingError) {
       const message =
@@ -293,6 +450,11 @@ export function AIView() {
       null
     );
   }, [config]);
+
+  const hasConversationContent =
+    (currentSession?.events.length ?? 0) > 0 ||
+    liveToolActivities.length > 0 ||
+    Boolean(streamingText);
 
   const updateCurrentAgent = (
     updater: (draft: NonNullable<typeof currentAgent>) => void,
@@ -376,142 +538,30 @@ export function AIView() {
   }
 
   return (
-    <>
-      <div className="border-b border-white/10 bg-gradient-to-b from-[#0F1115] to-transparent p-6 backdrop-blur-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1
-              style={{ fontFamily: "var(--font-family-tech)" }}
-              className="mb-1 tracking-wider text-white uppercase"
-            >
-              {t("ai.title")}
-            </h1>
-            <p className="max-w-xl text-sm text-white/50">{t("ai.subtitle")}</p>
-          </div>
-          <Button
-            variant="outline"
-            className="shrink-0 cursor-pointer border-[#FCE100]/40 bg-[#FCE100]/10 text-[#FCE100] hover:bg-[#FCE100]/20"
-            onClick={async () => {
-              await createSession();
-              const nextError = useAiStore.getState().error;
-              if (nextError) {
-                toast.error(nextError);
-              }
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t("ai.new_session")}
-          </Button>
+    <div className="flex min-h-0 flex-1 bg-[#0C0E12]">
+      <Tabs defaultValue="conversation" className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
+        <div className="pb-3">
+          <TabsList className="grid w-full grid-cols-4 bg-white/5">
+            <TabsTrigger value="conversation">{t("ai.tabs.conversation")}</TabsTrigger>
+            <TabsTrigger value="agent">{t("ai.tabs.agent")}</TabsTrigger>
+            <TabsTrigger value="skills">{t("ai.tabs.skills")}</TabsTrigger>
+            <TabsTrigger value="models">{t("ai.tabs.models")}</TabsTrigger>
+          </TabsList>
         </div>
-      </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="w-72 shrink-0 border-r border-white/10 bg-[#101318] p-4">
-          <div className="mb-4 flex items-center gap-3 rounded-lg border border-[#FCE100]/20 bg-[#FCE100]/10 p-3">
-            <Bot className="h-5 w-5 text-[#FCE100]" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-white">{t("ai.mode_active")}</p>
-              <p className="text-xs text-white/50">{t("ai.mode_active_hint")}</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/40">
-              {t("ai.session_list")}
-            </p>
-            <ScrollArea className="h-[calc(100vh-250px)]">
-              <div className="space-y-2 pr-3">
-                {isLoadingSessions ? (
-                  <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white/50">
-                    {t("ai.loading_sessions")}
-                  </div>
-                ) : sessions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-white/10 bg-black/20 p-4 text-sm text-white/50">
-                    {t("ai.empty_sessions")}
-                  </div>
-                ) : (
-                  sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={() => selectSession(session.id)}
-                      className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                        currentSessionId === session.id
-                          ? "border-[#FCE100]/50 bg-[#FCE100]/10"
-                          : "border-white/10 bg-black/20 hover:bg-white/5"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">
-                            {session.title}
-                          </p>
-                          <p className="mt-1 text-xs text-white/45">
-                            {formatTimestamp(session.updated_at_ms)}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/60">
-                          {session.message_count}
-                        </span>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </aside>
-
-        <main className="flex min-w-0 flex-1 flex-col bg-[#0C0E12]">
-          <Tabs defaultValue="conversation" className="flex min-h-0 flex-1 flex-col">
-            <div className="border-b border-white/10 px-4 py-3">
-              <TabsList className="grid w-full grid-cols-4 bg-white/5">
-                <TabsTrigger value="conversation">{t("ai.tabs.conversation")}</TabsTrigger>
-                <TabsTrigger value="agent">{t("ai.tabs.agent")}</TabsTrigger>
-                <TabsTrigger value="skills">{t("ai.tabs.skills")}</TabsTrigger>
-                <TabsTrigger value="models">{t("ai.tabs.models")}</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="conversation" className="min-h-0 flex-1">
-              <div className="flex h-full flex-col">
-                <div className="flex-1 overflow-y-auto p-4">
+        <TabsContent value="conversation" className="mt-0 min-h-0 flex-1">
+          <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-[#171A20]">
+            <div className="flex-1 overflow-y-auto p-4">
                   {error ? (
                     <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                       {error}
                     </div>
                   ) : null}
                   {currentSession ? (
-                    <div className="rounded-2xl border border-white/10 bg-[#171A20] p-4">
-                      <div className="mb-4 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h2 className="truncate text-lg font-semibold text-white">
-                            {currentSession.title}
-                          </h2>
-                          <p className="text-xs text-white/45">
-                            {t("ai.session_meta", {
-                              created: formatTimestamp(currentSession.created_at_ms),
-                              updated: formatTimestamp(currentSession.updated_at_ms),
-                            })}
-                          </p>
-                        </div>
-                          <Button
-                            variant="ghost"
-                            className="shrink-0 cursor-pointer text-white/50 hover:bg-red-500/10 hover:text-red-300"
-                            onClick={async () => {
-                              await deleteSession(currentSession.id);
-                              const nextError = useAiStore.getState().error;
-                              if (nextError) {
-                                toast.error(nextError);
-                              }
-                            }}
-                          >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
+                    <>
                       {isLoadingSession ? (
                         <p className="text-sm text-white/50">{t("ai.loading_session")}</p>
-                      ) : currentSession.events.length === 0 ? (
+                      ) : !hasConversationContent ? (
                         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 p-6 text-center">
                           <Waves className="mx-auto mb-3 h-8 w-8 text-[#FCE100]/70" />
                           <p className="text-sm text-white/70">
@@ -523,22 +573,102 @@ export function AIView() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {currentSession.events.map((event) => (
-                            <div
-                              key={event.id}
-                              className="rounded-xl border border-white/10 bg-black/20 p-4"
-                            >
-                              <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/40">
-                                <span className="truncate">{event.kind}</span>
-                                <span className="shrink-0">
-                                  {formatTimestamp(event.created_at_ms)}
-                                </span>
+                          {currentSession.events.map((event) => {
+                            const toolCalls = parseToolCalls(event);
+                            const toolResult = parseToolResult(event);
+
+                            return (
+                              <div
+                                key={event.id}
+                                className={`rounded-xl border p-4 ${eventClasses(event.kind)}`}
+                              >
+                                <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/40">
+                                  <span className="truncate">
+                                    {eventTitle(event.kind, t)}
+                                  </span>
+                                  <span className="shrink-0">
+                                    {formatTimestamp(event.created_at_ms)}
+                                  </span>
+                                </div>
+
+                                {toolCalls.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {toolCalls.map((toolCall, index) => (
+                                      <div
+                                        key={toolCall.id ?? `${event.id}-${index}`}
+                                        className="rounded-lg border border-white/10 bg-black/20 p-3"
+                                      >
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                          <span className="truncate text-sm font-medium text-white">
+                                            {toolCall.function?.name ?? "tool"}
+                                          </span>
+                                          <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                                            {t("ai.tool_phases.call")}
+                                          </span>
+                                        </div>
+                                        {toolCall.function?.arguments ? (
+                                          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/65">
+                                            {formatStructuredText(
+                                              toolCall.function.arguments,
+                                            )}
+                                          </pre>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : toolResult ? (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-sm font-medium text-white">
+                                        {toolResult.name ?? t("ai.events.tool_result")}
+                                      </span>
+                                      <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-white/35">
+                                        {t("ai.tool_phases.result")}
+                                      </span>
+                                    </div>
+                                    <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-white/70">
+                                      {formatStructuredText(
+                                        toolResult.content ?? event.text,
+                                      ) || t("ai.empty_event")}
+                                    </pre>
+                                  </div>
+                                ) : (
+                                  <p className="whitespace-pre-wrap break-words text-sm text-white/75">
+                                    {renderEventSummary(event) || t("ai.empty_event")}
+                                  </p>
+                                )}
                               </div>
-                              <p className="whitespace-pre-wrap break-words text-sm text-white/75">
-                                {event.text || t("ai.empty_event")}
-                              </p>
+                            );
+                          })}
+
+                          {liveToolActivities.length > 0 ? (
+                            <div className="space-y-3">
+                              <div className="px-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
+                                {t("ai.live_tools")}
+                              </div>
+                              {liveToolActivities.map((activity) => (
+                                <div
+                                  key={activity.id}
+                                  className={`rounded-xl border p-4 ${toolPhaseClasses(
+                                    activity.phase,
+                                  )}`}
+                                >
+                                  <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className="truncate text-sm font-medium text-white">
+                                      {activity.name}
+                                    </span>
+                                    <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-white/40">
+                                      {toolPhaseLabel(activity.phase, t)}
+                                    </span>
+                                  </div>
+                                  <p className="whitespace-pre-wrap break-words text-sm text-white/75">
+                                    {activity.summary}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : null}
+
                           {isStreaming && streamingText ? (
                             <div className="rounded-xl border border-[#FCE100]/30 bg-[#FCE100]/10 p-4">
                               <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/45">
@@ -552,46 +682,46 @@ export function AIView() {
                           ) : null}
                         </div>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-white/10 bg-[#171A20] p-8 text-center">
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-8 text-center">
                       <p className="text-sm text-white/60">{t("ai.select_or_create")}</p>
                     </div>
                   )}
-                </div>
+            </div>
 
-                <div className="border-t border-white/10 bg-[#12151A] p-4">
-                  <div className="flex flex-col gap-3 rounded-2xl border border-[#FCE100]/20 bg-[#FCE100]/5 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-white">{t("ai.ptt_title")}</p>
-                      <p className="text-xs text-white/45">{t("ai.ptt_body")}</p>
-                    </div>
-                    {lastTranscript ? (
-                      <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                        <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-white/35">
-                          {t("ai.latest_transcript")}
-                        </p>
-                        <p className="text-sm text-white/75">{lastTranscript}</p>
-                      </div>
-                    ) : null}
-                    <Button
-                      className={`w-full text-black ${
-                        isRecording
-                          ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
-                          : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
-                      }`}
-                      onMouseDown={() => void startManualRecording()}
-                      onMouseUp={() => void stopManualRecording()}
-                      onMouseLeave={() => void stopManualRecording()}
-                      onTouchStart={() => void startManualRecording()}
-                      onTouchEnd={() => void stopManualRecording()}
-                    >
-                      {isRecording ? t("ai.ptt_button_recording") : t("ai.ptt_button")}
-                    </Button>
-                  </div>
+            <div className="border-t border-white/10 bg-[#12151A] p-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-[#FCE100]/20 bg-[#FCE100]/5 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-white">{t("ai.ptt_title")}</p>
+                  <p className="text-xs text-white/45">{t("ai.ptt_body")}</p>
                 </div>
+                {lastTranscript ? (
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-white/35">
+                      {t("ai.latest_transcript")}
+                    </p>
+                    <p className="text-sm text-white/75">{lastTranscript}</p>
+                  </div>
+                ) : null}
+                <Button
+                  className={`w-full text-black ${
+                    isRecording
+                      ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
+                      : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
+                  }`}
+                  onMouseDown={() => void startManualRecording()}
+                  onMouseUp={() => void stopManualRecording()}
+                  onMouseLeave={() => void stopManualRecording()}
+                  onTouchStart={() => void startManualRecording()}
+                  onTouchEnd={() => void stopManualRecording()}
+                >
+                  {isRecording ? t("ai.ptt_button_recording") : t("ai.ptt_button")}
+                </Button>
               </div>
-            </TabsContent>
+            </div>
+          </div>
+        </TabsContent>
 
             <TabsContent value="agent" className="min-h-0 flex-1 overflow-y-auto p-4">
               <Card className="border-white/10 bg-[#1A1D24] text-white">
@@ -846,6 +976,34 @@ export function AIView() {
                         }
                       />
                     </div>
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
+                      <div>
+                        <p className="text-sm text-white">{t("ai.models.tts_enabled")}</p>
+                        <p className="text-xs text-white/45">
+                          {t("ai.models.tts_enabled_hint")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={config.ai.tts_enabled}
+                        onCheckedChange={(checked) =>
+                          updateConfig((draft) => {
+                            draft.ai.tts_enabled = checked;
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("ai.models.tts_model")}</Label>
+                      <Input
+                        className="bg-black/30 border-white/10"
+                        value={config.ai.default_tts_model}
+                        onChange={(event) =>
+                          updateConfig((draft) => {
+                            draft.ai.default_tts_model = event.target.value;
+                          })
+                        }
+                      />
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -856,9 +1014,7 @@ export function AIView() {
                 ) : null}
               </div>
             </TabsContent>
-          </Tabs>
-        </main>
-      </div>
-    </>
+      </Tabs>
+    </div>
   );
 }

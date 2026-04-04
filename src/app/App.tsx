@@ -51,10 +51,6 @@ export default function App() {
       return;
     }
 
-    if (config.mode === "ai_agent" && activeNav === "macros") {
-      setActiveNav("ai");
-    }
-
     if (config.mode === "voice_command" && activeNav === "ai") {
       setActiveNav("macros");
     }

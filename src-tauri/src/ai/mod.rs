@@ -1,2 +1,2 @@
 pub mod client;
-pub mod session_store;
+pub mod types;

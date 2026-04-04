@@ -68,6 +68,17 @@
     "ai_api_key": "AI API Key",
     "ai_chat_model": "默认聊天模型",
     "ai_asr_model": "默认 ASR 模型",
+    "ai_tts_enabled": "启用 AI 语音播报",
+    "ai_tts_enabled_desc": "助手回复完成后，自动调用 TTS，并复用当前这轮录音作为参考音色。",
+    "ai_tts_model": "默认 TTS 模型",
+    "ai_reference_audio_select": "参考音频",
+    "ai_reference_audio_select_placeholder": "选择一段本地参考录音",
+    "ai_reference_audio_select_hint": "可从 AI 本地录音列表里选择；不选时默认使用当前轮录音。",
+    "ai_reference_audio_auto": "自动使用当前轮录音",
+    "ai_reference_audio_path": "参考音频路径",
+    "ai_reference_audio_path_placeholder": "也可以直接填写本地音频绝对路径",
+    "ai_reference_text": "参考文本",
+    "ai_reference_text_placeholder": "填写与参考音频对应的文本；留空则默认使用当前轮转写",
     "ai_auto_execute": "自动执行 Skill",
     "ai_auto_execute_desc": "开启后，AI 触发的工具调用会直接在本地执行，不再额外确认。",
     "ai_ptt_hint": "AI 模式直接复用“按键绑定”页面里的按键说话配置。",
@@ -158,6 +169,18 @@
     "latest_transcript": "最近一次转写",
     "streaming_label": "助手",
     "streaming_status": "生成中...",
+    "live_tools": "实时工具执行",
+    "events": {
+      "user": "用户转写",
+      "assistant": "助手回复",
+      "tool_call": "工具调用",
+      "tool_result": "工具结果"
+    },
+    "tool_phases": {
+      "call": "执行中",
+      "result": "已完成",
+      "error": "失败"
+    },
     "tabs": {
       "conversation": "会话",
       "agent": "Agent",
@@ -194,7 +217,10 @@
       "base_url": "接口地址",
       "api_key": "API Key",
       "chat_model": "聊天模型",
-      "asr_model": "ASR 模型"
+      "asr_model": "ASR 模型",
+      "tts_enabled": "启用 TTS 播报",
+      "tts_enabled_hint": "助手回复完成后自动合成并播放固定系统音色语音。",
+      "tts_model": "TTS 模型"
     }
   },
   "stratagems": {

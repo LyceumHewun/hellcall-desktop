@@ -20,6 +20,8 @@ export interface AiConfig {
   api_key: string;
   default_chat_model: string;
   default_asr_model: string;
+  tts_enabled: boolean;
+  default_tts_model: string;
   auto_execute_skills: boolean;
   default_agent_id: string;
   agents: AiAgentConfig[];

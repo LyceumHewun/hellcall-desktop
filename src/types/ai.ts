@@ -16,3 +16,11 @@ export interface AiSessionSummary {
 export interface AiSessionRecord extends AiSessionSummary {
   events: AiSessionEvent[];
 }
+
+export interface AiLiveToolActivity {
+  id: string;
+  session_id: string;
+  phase: "call" | "result" | "error";
+  name: string;
+  summary: string;
+}

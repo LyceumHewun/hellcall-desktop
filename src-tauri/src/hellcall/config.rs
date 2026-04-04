@@ -62,6 +62,14 @@ fn default_ai_asr_model() -> String {
     "FunAudioLLM/SenseVoiceSmall".to_string()
 }
 
+fn default_ai_tts_enabled() -> bool {
+    true
+}
+
+fn default_ai_tts_model() -> String {
+    "FunAudioLLM/CosyVoice2-0.5B".to_string()
+}
+
 fn default_ai_agent_id() -> String {
     "tactical-assistant".to_string()
 }
@@ -144,6 +152,10 @@ pub struct AiConfig {
     pub default_chat_model: String,
     #[serde(default = "default_ai_asr_model")]
     pub default_asr_model: String,
+    #[serde(default = "default_ai_tts_enabled")]
+    pub tts_enabled: bool,
+    #[serde(default = "default_ai_tts_model")]
+    pub default_tts_model: String,
     #[serde(default = "default_ai_auto_execute_skills")]
     pub auto_execute_skills: bool,
     #[serde(default = "default_ai_agent_id")]
@@ -269,6 +281,8 @@ impl Default for AiConfig {
             api_key: String::new(),
             default_chat_model: default_ai_chat_model(),
             default_asr_model: default_ai_asr_model(),
+            tts_enabled: default_ai_tts_enabled(),
+            default_tts_model: default_ai_tts_model(),
             auto_execute_skills: default_ai_auto_execute_skills(),
             default_agent_id: default_ai_agent_id(),
             agents: default_ai_agents(),

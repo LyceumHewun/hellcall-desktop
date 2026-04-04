@@ -68,6 +68,17 @@
     "ai_api_key": "AI API Key",
     "ai_chat_model": "Default Chat Model",
     "ai_asr_model": "Default ASR Model",
+    "ai_tts_enabled": "Enable AI TTS",
+    "ai_tts_enabled_desc": "Automatically synthesize and play the assistant reply using the current turn recording as the reference voice.",
+    "ai_tts_model": "Default TTS Model",
+    "ai_reference_audio_select": "Reference Audio",
+    "ai_reference_audio_select_placeholder": "Choose a local reference recording",
+    "ai_reference_audio_select_hint": "You can pick from local AI recordings here. If empty, the current turn recording is used.",
+    "ai_reference_audio_auto": "Use current turn recording automatically",
+    "ai_reference_audio_path": "Reference Audio Path",
+    "ai_reference_audio_path_placeholder": "Or enter an absolute local audio path directly",
+    "ai_reference_text": "Reference Text",
+    "ai_reference_text_placeholder": "Enter the transcript for the reference audio. If empty, the current turn transcript is used.",
     "ai_auto_execute": "Auto Execute Skills",
     "ai_auto_execute_desc": "When enabled, AI tool calls will execute locally without an extra confirmation step.",
     "ai_ptt_hint": "AI mode reuses the existing Push-to-Talk binding from Key Bindings.",
@@ -158,6 +169,18 @@
     "latest_transcript": "Latest Transcript",
     "streaming_label": "Assistant",
     "streaming_status": "Streaming...",
+    "live_tools": "Live Tool Activity",
+    "events": {
+      "user": "User Transcript",
+      "assistant": "Assistant Reply",
+      "tool_call": "Tool Call",
+      "tool_result": "Tool Result"
+    },
+    "tool_phases": {
+      "call": "Running",
+      "result": "Done",
+      "error": "Failed"
+    },
     "tabs": {
       "conversation": "Conversation",
       "agent": "Agent",
@@ -194,7 +217,10 @@
       "base_url": "Base URL",
       "api_key": "API Key",
       "chat_model": "Chat Model",
-      "asr_model": "ASR Model"
+      "asr_model": "ASR Model",
+      "tts_enabled": "Enable TTS Playback",
+      "tts_enabled_hint": "Automatically synthesize and play the final assistant reply with a fixed system voice.",
+      "tts_model": "TTS Model"
     }
   },
   "stratagems": {
