@@ -31,9 +31,11 @@ import { useTranslation } from "react-i18next";
 export function GlobalSettingsView() {
   const { config, updateConfig } = useConfigStore();
   const { t, i18n } = useTranslation();
-  const { status, selectedDevice, setSelectedDevice } = useEngineStore();
+  const { status, aiStatus, selectedDevice, setSelectedDevice } = useEngineStore();
   const isEngineRunning = status === "STARTING" || status === "ACTIVE";
+  const isAiAgentRunning = aiStatus === "WARMING_UP" || aiStatus === "READY";
   const isVirtualMicLocked = isEngineRunning;
+  const isModeSwitchLocked = isEngineRunning || isAiAgentRunning;
 
   const [devices, setDevices] = useState<string[]>([]);
   const [outputDevices, setOutputDevices] = useState<string[]>([]);
@@ -209,13 +211,14 @@ export function GlobalSettingsView() {
                 <Label>{t("settings.mode")}</Label>
                 <Select
                   value={config.mode}
+                  disabled={isModeSwitchLocked}
                   onValueChange={(val) =>
                     updateConfig((c) => {
                       c.mode = val as any;
                     })
                   }
                 >
-                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white disabled:cursor-not-allowed disabled:opacity-60">
                     <SelectValue placeholder={t("settings.mode_voice")} />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1E2128] border-white/10 text-white">
@@ -228,7 +231,9 @@ export function GlobalSettingsView() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-white/45">
-                  {t("settings.mode_hint")}
+                  {isModeSwitchLocked
+                    ? t("settings.mode_locked_hint")
+                    : t("settings.mode_hint")}
                 </p>
               </div>
             </CardContent>

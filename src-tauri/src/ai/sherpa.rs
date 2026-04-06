@@ -320,6 +320,26 @@ impl SherpaSpeechRuntime {
         })
     }
 
+    pub fn prewarm_recognizer(
+        &mut self,
+        app_handle: &tauri::AppHandle,
+        ai_config: &AiConfig,
+    ) -> Result<(), String> {
+        self.ensure_recognizer(app_handle, ai_config)?;
+        Ok(())
+    }
+
+    pub fn prewarm_tts(
+        &mut self,
+        app_handle: &tauri::AppHandle,
+        ai_config: &AiConfig,
+    ) -> Result<(), String> {
+        if ai_config.speech.tts.enabled {
+            self.ensure_tts(app_handle, ai_config)?;
+        }
+        Ok(())
+    }
+
     pub fn transcribe(
         &mut self,
         app_handle: &tauri::AppHandle,

@@ -109,6 +109,16 @@ struct AiErrorEventPayload {
 }
 
 #[derive(Clone, serde::Serialize)]
+struct AiAgentErrorEventPayload {
+    message: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct AiWarmupStatePayload {
+    stage: String,
+}
+
+#[derive(Clone, serde::Serialize)]
 struct AiChatDeltaPayload {
     session_id: String,
     delta: String,
@@ -139,6 +149,8 @@ struct AppState {
     ai_hotkey_bridge: Mutex<Option<AiHotkeyBridge>>,
     ai_speaker: Mutex<Option<AiSpeakerBridge>>,
     ai_sherpa: Mutex<Option<ai::sherpa::SherpaSpeechRuntime>>,
+    ai_enabled: Mutex<bool>,
+    ai_warmup_in_progress: Mutex<bool>,
     ai_streaming: Mutex<bool>,
 }
 
@@ -274,6 +286,24 @@ fn emit_ai_error(app_handle: &AppHandle, message: impl Into<String>) {
     );
 }
 
+fn emit_ai_agent_error(app_handle: &AppHandle, message: impl Into<String>) {
+    let _ = app_handle.emit(
+        "ai-agent-error",
+        AiAgentErrorEventPayload {
+            message: message.into(),
+        },
+    );
+}
+
+fn emit_ai_warmup_state(app_handle: &AppHandle, stage: impl Into<String>) {
+    let _ = app_handle.emit(
+        "ai-warmup-state",
+        AiWarmupStatePayload {
+            stage: stage.into(),
+        },
+    );
+}
+
 fn configure_ai_hotkey_bridge(
     app_handle: &AppHandle,
     state: &State<'_, AppState>,
@@ -392,6 +422,7 @@ fn start_ai_recording_internal(app_handle: &AppHandle) -> Result<(), String> {
     use cpal::traits::StreamTrait;
 
     let state = app_handle.state::<AppState>();
+    ensure_ai_enabled(&state)?;
     let mut recording_guard = state.ai_recording.lock().map_err(|e| e.to_string())?;
     if recording_guard.is_some() {
         return Ok(());
@@ -542,6 +573,15 @@ fn emit_ai_chat_finished(app_handle: &AppHandle, session_id: &str, message: &str
             message: message.to_string(),
         },
     );
+}
+
+fn ensure_ai_enabled(state: &State<'_, AppState>) -> Result<(), String> {
+    let enabled = *state.ai_enabled.lock().map_err(|e| e.to_string())?;
+    if enabled {
+        Ok(())
+    } else {
+        Err("AI Agent is not started. Start it from the sidebar first.".to_string())
+    }
 }
 
 fn emit_ai_tool_event(
@@ -1430,6 +1470,98 @@ fn stop_ai_recording(app_handle: AppHandle) -> Result<ai::client::AiTranscriptio
 }
 
 #[tauri::command]
+fn start_ai_agent(app_handle: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+    if runtime.mode != hellcall::config::AppMode::AiAgent {
+        return Err("Switch to AI mode before starting AI Agent.".to_string());
+    }
+
+    sync_ai_speaker_bridge(&state, &runtime)?;
+
+    {
+        let mut warmup_guard = state.ai_warmup_in_progress.lock().map_err(|e| e.to_string())?;
+        if *warmup_guard {
+            return Err("AI Agent is already warming up.".to_string());
+        }
+        *warmup_guard = true;
+    }
+
+    let app_handle_clone = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let warmup_result = (|| -> Result<(), String> {
+            emit_ai_warmup_state(&app_handle_clone, "LOADING_RUNTIME");
+            let state = app_handle_clone.state::<AppState>();
+            let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
+            if sherpa_guard.is_none() {
+                sherpa_guard.replace(ai::sherpa::SherpaSpeechRuntime::new(&app_handle_clone)?);
+            }
+            if let Some(sherpa) = sherpa_guard.as_mut() {
+                emit_ai_warmup_state(&app_handle_clone, "LOADING_STT");
+                sherpa.prewarm_recognizer(&app_handle_clone, &runtime.ai_config)?;
+                if runtime.ai_config.speech.tts.enabled {
+                    emit_ai_warmup_state(&app_handle_clone, "LOADING_TTS");
+                    sherpa.prewarm_tts(&app_handle_clone, &runtime.ai_config)?;
+                }
+            }
+            Ok(())
+        })();
+
+        let state = app_handle_clone.state::<AppState>();
+        if let Ok(mut warmup_guard) = state.ai_warmup_in_progress.lock() {
+            *warmup_guard = false;
+        }
+
+        match warmup_result {
+            Ok(()) => {
+                if let Ok(mut enabled) = state.ai_enabled.lock() {
+                    *enabled = true;
+                }
+                emit_ai_warmup_state(&app_handle_clone, "READY");
+            }
+            Err(error) => {
+                if let Ok(mut sherpa_guard) = state.ai_sherpa.lock() {
+                    if let Some(runtime) = sherpa_guard.as_mut() {
+                        runtime.invalidate_models();
+                    }
+                    *sherpa_guard = None;
+                }
+                if let Ok(mut enabled) = state.ai_enabled.lock() {
+                    *enabled = false;
+                }
+                emit_ai_warmup_state(&app_handle_clone, "OFFLINE");
+                emit_ai_agent_error(&app_handle_clone, error);
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_ai_agent(app_handle: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    {
+        let mut enabled = state.ai_enabled.lock().map_err(|e| e.to_string())?;
+        *enabled = false;
+    }
+
+    {
+        let mut recording_guard = state.ai_recording.lock().map_err(|e| e.to_string())?;
+        *recording_guard = None;
+    }
+
+    {
+        let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
+        if let Some(runtime) = sherpa_guard.as_mut() {
+            runtime.invalidate_models();
+        }
+        *sherpa_guard = None;
+    }
+
+    emit_ai_warmup_state(&app_handle, "OFFLINE");
+    Ok(())
+}
+
+#[tauri::command]
 fn start_ai_chat_stream(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -1498,6 +1630,8 @@ pub fn run() {
             ai_hotkey_bridge: Mutex::new(None),
             ai_speaker: Mutex::new(None),
             ai_sherpa: Mutex::new(None),
+            ai_enabled: Mutex::new(false),
+            ai_warmup_in_progress: Mutex::new(false),
             ai_streaming: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
@@ -1525,6 +1659,8 @@ pub fn run() {
             get_ai_session,
             delete_ai_session,
             sync_ai_runtime,
+            start_ai_agent,
+            stop_ai_agent,
             start_ai_recording,
             stop_ai_recording,
             start_ai_chat_stream,

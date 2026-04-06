@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Plus, Trash2, Waves } from "lucide-react";
@@ -178,6 +178,8 @@ export function AIView() {
   const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
   const selectedDevice = useEngineStore((state) => state.selectedDevice);
+  const aiStatus = useEngineStore((state) => state.aiStatus);
+  const conversationContainerRef = useRef<HTMLDivElement | null>(null);
   const [runtimeReady, setRuntimeReady] = useState<boolean | null>(null);
   const [sttReady, setSttReady] = useState<boolean | null>(null);
   const [ttsReady, setTtsReady] = useState<boolean | null>(null);
@@ -188,7 +190,6 @@ export function AIView() {
     isRecording,
     isStreaming,
     streamingText,
-    lastTranscript,
     isLoadingSession,
     error,
     setError,
@@ -602,6 +603,39 @@ export function AIView() {
   const requiresSpeechDownload = runtimeReady === false || sttReady === false;
   const showTtsDownloadHint =
     Boolean(config?.ai.speech.tts.enabled) && ttsReady === false;
+  const isAiReady = aiStatus === "READY";
+  const pttButtonLabel = isRecording
+    ? t("ai.ptt_button_recording")
+    : aiStatus === "WARMING_UP"
+      ? t("ai.ptt_button_warming_up")
+      : aiStatus === "READY"
+        ? t("ai.ptt_button")
+        : t("ai.ptt_button_disabled");
+  const pttDisabled = requiresSpeechDownload || !isAiReady;
+
+  useLayoutEffect(() => {
+    const container = conversationContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
+  useLayoutEffect(() => {
+    const container = conversationContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, [
+    currentSession?.events.length,
+    liveToolActivities.length,
+    streamingText,
+    isStreaming,
+    error,
+  ]);
 
   const updateCurrentAgent = (
     updater: (draft: NonNullable<typeof currentAgent>) => void,
@@ -754,7 +788,7 @@ export function AIView() {
 
         <TabsContent value="conversation" className="mt-0 min-h-0 flex-1">
           <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-[#171A20]">
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={conversationContainerRef} className="flex-1 overflow-y-auto p-4">
                   {error ? (
                     <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                       {error}
@@ -894,50 +928,21 @@ export function AIView() {
             </div>
 
             <div className="border-t border-white/10 bg-[#12151A] p-4">
-              <div className="flex flex-col gap-3 rounded-2xl border border-[#FCE100]/20 bg-[#FCE100]/5 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-white">{t("ai.ptt_title")}</p>
-                  <p className="text-xs text-white/45">{t("ai.ptt_body")}</p>
-                </div>
-                {lastTranscript ? (
-                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-white/35">
-                      {t("ai.latest_transcript")}
-                    </p>
-                    <p className="text-sm text-white/75">{lastTranscript}</p>
-                  </div>
-                ) : null}
-                {runtimeReady === false ? (
-                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
-                    {t("ai.models.runtime_required")}
-                  </div>
-                ) : null}
-                {sttReady === false ? (
-                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
-                    {t("ai.models.stt_required")}
-                  </div>
-                ) : null}
-                {showTtsDownloadHint ? (
-                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
-                    {t("ai.models.tts_required")}
-                  </div>
-                ) : null}
-                <Button
-                  className={`w-full text-black ${
-                    isRecording
-                      ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
-                      : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
-                  }`}
-                  disabled={requiresSpeechDownload}
-                  onMouseDown={() => void startManualRecording()}
-                  onMouseUp={() => void stopManualRecording()}
-                  onMouseLeave={() => void stopManualRecording()}
-                  onTouchStart={() => void startManualRecording()}
-                  onTouchEnd={() => void stopManualRecording()}
-                >
-                  {isRecording ? t("ai.ptt_button_recording") : t("ai.ptt_button")}
-                </Button>
-              </div>
+              <Button
+                className={`w-full text-black ${
+                  isRecording
+                    ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
+                    : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
+                }`}
+                disabled={pttDisabled}
+                onMouseDown={() => void startManualRecording()}
+                onMouseUp={() => void stopManualRecording()}
+                onMouseLeave={() => void stopManualRecording()}
+                onTouchStart={() => void startManualRecording()}
+                onTouchEnd={() => void stopManualRecording()}
+              >
+                {pttButtonLabel}
+              </Button>
             </div>
           </div>
         </TabsContent>
@@ -1186,37 +1191,39 @@ export function AIView() {
                         }
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
-                      <div>
-                        <p className="text-sm text-white">{t("ai.models.stt_use_itn")}</p>
-                        <p className="text-xs text-white/45">
+                    <div className="space-y-2">
+                      <Label>{t("ai.models.stt_use_itn")}</Label>
+                      <div className="flex items-center justify-between space-x-4">
+                        <p className="text-sm text-white/50">
                           {t("ai.models.stt_use_itn_hint")}
                         </p>
+                        <Switch
+                          className="border cursor-pointer"
+                          checked={config.ai.speech.stt.use_itn}
+                          onCheckedChange={(checked) =>
+                            updateConfig((draft) => {
+                              draft.ai.speech.stt.use_itn = checked;
+                            })
+                          }
+                        />
                       </div>
-                      <Switch
-                        checked={config.ai.speech.stt.use_itn}
-                        onCheckedChange={(checked) =>
-                          updateConfig((draft) => {
-                            draft.ai.speech.stt.use_itn = checked;
-                          })
-                        }
-                      />
                     </div>
-                    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
-                      <div>
-                        <p className="text-sm text-white">{t("ai.models.tts_enabled")}</p>
-                        <p className="text-xs text-white/45">
+                    <div className="space-y-2">
+                      <Label>{t("ai.models.tts_enabled")}</Label>
+                      <div className="flex items-center justify-between space-x-4">
+                        <p className="text-sm text-white/50">
                           {t("ai.models.tts_enabled_hint")}
                         </p>
+                        <Switch
+                          className="border cursor-pointer"
+                          checked={config.ai.speech.tts.enabled}
+                          onCheckedChange={(checked) =>
+                            updateConfig((draft) => {
+                              draft.ai.speech.tts.enabled = checked;
+                            })
+                          }
+                        />
                       </div>
-                      <Switch
-                        checked={config.ai.speech.tts.enabled}
-                        onCheckedChange={(checked) =>
-                          updateConfig((draft) => {
-                            draft.ai.speech.tts.enabled = checked;
-                          })
-                        }
-                      />
                     </div>
                     <AssetModelSelector
                       label={t("ai.models.tts_model")}
