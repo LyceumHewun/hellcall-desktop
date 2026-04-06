@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CustomTitlebar } from "./components/CustomTitlebar";
 import { Sidebar } from "./components/Sidebar";
@@ -12,6 +13,8 @@ import { StratagemsView } from "./views/StratagemsView";
 import { AIView } from "./views/AIView";
 import { Toaster } from "sonner";
 import { useConfigStore } from "../store/configStore";
+import { useAiStore } from "../store/aiStore";
+import { useEngineStore } from "../store/engineStore";
 
 const toasterOptions = {
   style: {
@@ -34,6 +37,8 @@ const toasterOptions = {
 
 export default function App() {
   const { config, isLoading, fetchConfig } = useConfigStore();
+  const currentSessionId = useAiStore((state) => state.currentSessionId);
+  const selectedDevice = useEngineStore((state) => state.selectedDevice);
   const [activeNav, setActiveNav] = useState("macros");
 
   useEffect(() => {
@@ -45,6 +50,20 @@ export default function App() {
       getCurrentWindow().show();
     }
   }, [isLoading, config]);
+
+  useEffect(() => {
+    if (!config) {
+      return;
+    }
+
+    invoke("sync_ai_runtime_config", {
+      config,
+      deviceName: selectedDevice,
+      sessionId: currentSessionId,
+    }).catch((error) => {
+      console.error("Failed to sync AI runtime config:", error);
+    });
+  }, [config, currentSessionId, selectedDevice]);
 
   useEffect(() => {
     if (!config) {

@@ -177,7 +177,6 @@ function toolPhaseLabel(
 export function AIView() {
   const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
-  const selectedDevice = useEngineStore((state) => state.selectedDevice);
   const aiStatus = useEngineStore((state) => state.aiStatus);
   const conversationContainerRef = useRef<HTMLDivElement | null>(null);
   const [runtimeReady, setRuntimeReady] = useState<boolean | null>(null);
@@ -208,25 +207,6 @@ export function AIView() {
   useEffect(() => {
     fetchSession();
   }, [fetchSession]);
-
-  useEffect(() => {
-    if (!config) {
-      return;
-    }
-
-    invoke("sync_ai_runtime", {
-      config,
-      deviceName: selectedDevice,
-      sessionId: currentSessionId,
-    }).catch((syncError) => {
-      const message =
-        syncError instanceof Error
-          ? syncError.message
-          : String(syncError ?? t("ai.errors.sync_runtime"));
-      console.error("Failed to sync AI runtime:", syncError);
-      setError(message);
-    });
-  }, [config, currentSessionId, selectedDevice, setError, t]);
 
   useEffect(() => {
     if (!config || config.mode !== "ai_agent") {
@@ -388,16 +368,6 @@ export function AIView() {
       await fetchSession();
       resetStreamingText();
       resetLiveToolActivities();
-      await invoke("start_ai_chat_stream", {
-        sessionId: event.payload.session_id,
-      }).catch((chatError) => {
-        const message =
-          chatError instanceof Error
-            ? chatError.message
-            : String(chatError ?? t("ai.errors.start_chat"));
-        setError(message);
-        toast.error(message);
-      });
     }).then((fn) => {
       unlistenTranscript = fn;
       return fn;

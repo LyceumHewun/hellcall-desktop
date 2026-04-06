@@ -42,7 +42,7 @@ unsafe impl Send for UnsafeStreamWrapper {}
 unsafe impl Sync for UnsafeStreamWrapper {}
 
 #[derive(Clone)]
-struct AiRuntimeConfig {
+struct AiRuntimeContext {
     mode: hellcall::config::AppMode,
     selected_device: Option<String>,
     microphone_config: MicrophoneConfig,
@@ -53,7 +53,7 @@ struct AiRuntimeConfig {
     session_id: Option<String>,
 }
 
-impl Default for AiRuntimeConfig {
+impl Default for AiRuntimeContext {
     fn default() -> Self {
         Self {
             mode: hellcall::config::AppMode::VoiceCommand,
@@ -144,7 +144,7 @@ struct AppState {
     mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
     cached_vosk_runtime_model_paths: Mutex<HashMap<String, PathBuf>>,
     ai_session: Mutex<AiSessionRecord>,
-    ai_runtime: Mutex<AiRuntimeConfig>,
+    ai_runtime_context: Mutex<AiRuntimeContext>,
     ai_recording: Mutex<Option<AiRecordingCapture>>,
     ai_hotkey_bridge: Mutex<Option<AiHotkeyBridge>>,
     ai_speaker: Mutex<Option<AiSpeakerBridge>>,
@@ -262,7 +262,7 @@ fn append_ai_session_event(
     Ok(())
 }
 
-fn create_session_if_missing(app_handle: &AppHandle, runtime: &mut AiRuntimeConfig) -> Result<String, String> {
+fn create_session_if_missing(app_handle: &AppHandle, runtime: &mut AiRuntimeContext) -> Result<String, String> {
     let _ = app_handle;
     if runtime.session_id.as_deref() != Some(DEFAULT_AI_SESSION_ID) {
         runtime.session_id = Some(DEFAULT_AI_SESSION_ID.to_string());
@@ -307,12 +307,12 @@ fn emit_ai_warmup_state(app_handle: &AppHandle, stage: impl Into<String>) {
 fn configure_ai_hotkey_bridge(
     app_handle: &AppHandle,
     state: &State<'_, AppState>,
-    config: &Config,
+    runtime: &AiRuntimeContext,
 ) -> Result<(), String> {
     let mut bridge_guard = state.ai_hotkey_bridge.lock().map_err(|e| e.to_string())?;
 
-    let ptt_input = if config.mode == hellcall::config::AppMode::AiAgent {
-        config.key_map.get(&LocalKey::PTT).cloned()
+    let ptt_input = if runtime.mode == hellcall::config::AppMode::AiAgent {
+        runtime.key_map.get(&LocalKey::PTT).cloned()
     } else {
         None
     };
@@ -320,15 +320,19 @@ fn configure_ai_hotkey_bridge(
     let key_presser = if let Some(bridge) = bridge_guard.as_mut() {
         bridge
             .key_presser
-            .update_config(config.key_presser.clone(), config.key_map.clone(), HashMap::new())
+            .update_config(
+                runtime.key_presser_config.clone(),
+                runtime.key_map.clone(),
+                HashMap::new(),
+            )
             .map_err(|e| e.to_string())?;
         bridge.key_presser.clear_listen_map();
         Arc::clone(&bridge.key_presser)
     } else {
         let key_presser = Arc::new(
             KeyPresser::new(
-                config.key_presser.clone(),
-                config.key_map.clone(),
+                runtime.key_presser_config.clone(),
+                runtime.key_map.clone(),
                 HashMap::new(),
             )
             .map_err(|e| e.to_string())?,
@@ -357,7 +361,7 @@ fn configure_ai_hotkey_bridge(
                 }
             } else {
                 std::thread::spawn(move || {
-                    let runtime = match app_handle.state::<AppState>().ai_runtime.lock() {
+                    let runtime = match app_handle.state::<AppState>().ai_runtime_context.lock() {
                         Ok(guard) => guard.clone(),
                         Err(error) => {
                             emit_ai_error(&app_handle, error.to_string());
@@ -378,7 +382,7 @@ fn configure_ai_hotkey_bridge(
 
 fn sync_ai_speaker_bridge(
     state: &State<'_, AppState>,
-    runtime: &AiRuntimeConfig,
+    runtime: &AiRuntimeContext,
 ) -> Result<(), String> {
     let mut speaker_guard = state.ai_speaker.lock().map_err(|e| e.to_string())?;
 
@@ -428,7 +432,7 @@ fn start_ai_recording_internal(app_handle: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+    let runtime = state.ai_runtime_context.lock().map_err(|e| e.to_string())?.clone();
     let input_device_name =
         resolve_input_device_name(runtime.selected_device).map_err(|e| e.to_string())?;
     let microphone_input = open_input_stream(&input_device_name)
@@ -476,7 +480,7 @@ fn start_ai_recording_internal(app_handle: &AppHandle) -> Result<(), String> {
 
 fn stop_ai_recording_blocking(
     app_handle: &AppHandle,
-    runtime: AiRuntimeConfig,
+    runtime: AiRuntimeContext,
 ) -> Result<ai::client::AiTranscriptionResult, String> {
     let state = app_handle.state::<AppState>();
     let capture = {
@@ -522,7 +526,7 @@ fn stop_ai_recording_blocking(
     }
 
     let session_id = {
-        let mut runtime_guard = state.ai_runtime.lock().map_err(|e| e.to_string())?;
+        let mut runtime_guard = state.ai_runtime_context.lock().map_err(|e| e.to_string())?;
         create_session_if_missing(app_handle, &mut runtime_guard)?
     };
 
@@ -547,6 +551,17 @@ fn stop_ai_recording_blocking(
             transcript: result.transcript.clone(),
         },
     );
+
+    let runtime_for_chat = state
+        .ai_runtime_context
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    if let Err(error) =
+        launch_ai_chat_stream(app_handle.clone(), session_id.clone(), runtime_for_chat)
+    {
+        emit_ai_error(app_handle, error);
+    }
 
     Ok(result)
 }
@@ -573,6 +588,42 @@ fn emit_ai_chat_finished(app_handle: &AppHandle, session_id: &str, message: &str
             message: message.to_string(),
         },
     );
+}
+
+fn launch_ai_chat_stream(
+    app_handle: AppHandle,
+    session_id: String,
+    runtime: AiRuntimeContext,
+) -> Result<(), String> {
+    {
+        let state = app_handle.state::<AppState>();
+        let mut streaming = state.ai_streaming.lock().map_err(|e| e.to_string())?;
+        if *streaming {
+            return Err("AI chat is already streaming.".to_string());
+        }
+        *streaming = true;
+    }
+
+    emit_ai_chat_state(&app_handle, true);
+    let app_handle_clone = app_handle.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let result =
+            run_ai_chat_pipeline(app_handle_clone.clone(), session_id.clone(), runtime).await;
+
+        if let Err(error) = result {
+            emit_ai_error(&app_handle_clone, error);
+        } else if let Ok(message) = result {
+            emit_ai_chat_finished(&app_handle_clone, &session_id, &message);
+        }
+
+        if let Ok(mut streaming) = app_handle_clone.state::<AppState>().ai_streaming.lock() {
+            *streaming = false;
+        }
+        emit_ai_chat_state(&app_handle_clone, false);
+    });
+
+    Ok(())
 }
 
 fn ensure_ai_enabled(state: &State<'_, AppState>) -> Result<(), String> {
@@ -738,7 +789,7 @@ fn build_chat_messages(
     Ok(messages)
 }
 
-fn current_ai_agent(runtime: &AiRuntimeConfig) -> Result<hellcall::config::AiAgentConfig, String> {
+fn current_ai_agent(runtime: &AiRuntimeContext) -> Result<hellcall::config::AiAgentConfig, String> {
     runtime
         .ai_config
         .agents
@@ -880,7 +931,7 @@ fn execute_tool_call(
                 "get_key_mappings",
                 "Reading current logical key mappings",
             );
-            let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+            let runtime = state.ai_runtime_context.lock().map_err(|e| e.to_string())?.clone();
             let mappings = runtime
                 .key_map
                 .into_iter()
@@ -952,7 +1003,7 @@ fn append_tool_events(
 async fn run_ai_chat_pipeline(
     app_handle: AppHandle,
     session_id: String,
-    runtime: AiRuntimeConfig,
+    runtime: AiRuntimeContext,
 ) -> Result<String, String> {
     let state = app_handle.state::<AppState>();
     let agent = current_ai_agent(&runtime)?;
@@ -1048,7 +1099,7 @@ async fn run_ai_chat_pipeline(
 
 async fn synthesize_ai_tts_and_play(
     app_handle: &AppHandle,
-    runtime: &AiRuntimeConfig,
+    runtime: &AiRuntimeContext,
     text: &str,
 ) -> Result<(), String> {
     if !runtime.ai_config.speech.tts.enabled || text.trim().is_empty() {
@@ -1422,7 +1473,7 @@ fn delete_ai_session(app_handle: AppHandle, session_id: String) -> Result<bool, 
 }
 
 #[tauri::command]
-fn sync_ai_runtime(
+fn sync_ai_runtime_config(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     config: Config,
@@ -1430,7 +1481,7 @@ fn sync_ai_runtime(
     session_id: Option<String>,
 ) -> Result<(), String> {
     let runtime_snapshot = {
-        let mut runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?;
+        let mut runtime = state.ai_runtime_context.lock().map_err(|e| e.to_string())?;
         runtime.mode = config.mode.clone();
         runtime.selected_device = device_name.clone();
         runtime.microphone_config = config.microphone.clone();
@@ -1442,14 +1493,7 @@ fn sync_ai_runtime(
         runtime.clone()
     };
 
-    configure_ai_hotkey_bridge(&app_handle, &state, &config)?;
-    {
-        let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
-        if let Some(runtime) = sherpa_guard.as_mut() {
-            runtime.invalidate_models();
-        }
-        *sherpa_guard = None;
-    }
+    configure_ai_hotkey_bridge(&app_handle, &state, &runtime_snapshot)?;
     sync_ai_speaker_bridge(&state, &runtime_snapshot)
 }
 
@@ -1462,7 +1506,7 @@ fn start_ai_recording(app_handle: AppHandle) -> Result<(), String> {
 fn stop_ai_recording(app_handle: AppHandle) -> Result<ai::client::AiTranscriptionResult, String> {
     let runtime = app_handle
         .state::<AppState>()
-        .ai_runtime
+        .ai_runtime_context
         .lock()
         .map_err(|e| e.to_string())?
         .clone();
@@ -1471,11 +1515,12 @@ fn stop_ai_recording(app_handle: AppHandle) -> Result<ai::client::AiTranscriptio
 
 #[tauri::command]
 fn start_ai_agent(app_handle: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
+    let runtime = state.ai_runtime_context.lock().map_err(|e| e.to_string())?.clone();
     if runtime.mode != hellcall::config::AppMode::AiAgent {
         return Err("Switch to AI mode before starting AI Agent.".to_string());
     }
 
+    configure_ai_hotkey_bridge(&app_handle, &state, &runtime)?;
     sync_ai_speaker_bridge(&state, &runtime)?;
 
     {
@@ -1567,34 +1612,8 @@ fn start_ai_chat_stream(
     state: State<'_, AppState>,
     session_id: String,
 ) -> Result<(), String> {
-    {
-        let mut streaming = state.ai_streaming.lock().map_err(|e| e.to_string())?;
-        if *streaming {
-            return Err("AI chat is already streaming.".to_string());
-        }
-        *streaming = true;
-    }
-
-    emit_ai_chat_state(&app_handle, true);
-    let runtime = state.ai_runtime.lock().map_err(|e| e.to_string())?.clone();
-    let app_handle_clone = app_handle.clone();
-
-    tauri::async_runtime::spawn(async move {
-        let result = run_ai_chat_pipeline(app_handle_clone.clone(), session_id.clone(), runtime).await;
-
-        if let Err(error) = result {
-            emit_ai_error(&app_handle_clone, error);
-        } else if let Ok(message) = result {
-            emit_ai_chat_finished(&app_handle_clone, &session_id, &message);
-        }
-
-        if let Ok(mut streaming) = app_handle_clone.state::<AppState>().ai_streaming.lock() {
-            *streaming = false;
-        }
-        emit_ai_chat_state(&app_handle_clone, false);
-    });
-
-    Ok(())
+    let runtime = state.ai_runtime_context.lock().map_err(|e| e.to_string())?.clone();
+    launch_ai_chat_stream(app_handle, session_id, runtime)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1625,7 +1644,7 @@ pub fn run() {
             mic_test_stream: Mutex::new(None),
             cached_vosk_runtime_model_paths: Mutex::new(HashMap::new()),
             ai_session: Mutex::new(default_ai_session_record()),
-            ai_runtime: Mutex::new(AiRuntimeConfig::default()),
+            ai_runtime_context: Mutex::new(AiRuntimeContext::default()),
             ai_recording: Mutex::new(None),
             ai_hotkey_bridge: Mutex::new(None),
             ai_speaker: Mutex::new(None),
@@ -1658,7 +1677,7 @@ pub fn run() {
             save_config,
             get_ai_session,
             delete_ai_session,
-            sync_ai_runtime,
+            sync_ai_runtime_config,
             start_ai_agent,
             stop_ai_agent,
             start_ai_recording,
