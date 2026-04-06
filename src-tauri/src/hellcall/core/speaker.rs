@@ -29,8 +29,13 @@ struct DecodedAudio {
     samples: Vec<f32>,
 }
 
+enum PlaybackRequest {
+    File(String),
+    Samples(DecodedAudio),
+}
+
 pub struct Speaker {
-    tx: Sender<String>,
+    tx: Sender<PlaybackRequest>,
     config: Arc<RwLock<SpeakerRuntimeConfig>>,
     mic_passthrough: Option<MicPassthroughHandle>,
     virtual_mic_input_volume: Option<Arc<RwLock<f32>>>,
@@ -87,13 +92,18 @@ impl Speaker {
         local_stream: Option<OutputStream>,
         virtual_mic: Option<VirtualMicMixer>,
         config: Arc<RwLock<SpeakerRuntimeConfig>>,
-    ) -> (Sender<String>, JoinHandle<Result<()>>) {
-        let (tx, rx) = std::sync::mpsc::channel::<String>();
+    ) -> (Sender<PlaybackRequest>, JoinHandle<Result<()>>) {
+        let (tx, rx) = std::sync::mpsc::channel::<PlaybackRequest>();
         let handle = std::thread::spawn(move || -> Result<()> {
-            while let Ok(audio_path) = rx.recv() {
-                info!("play audio: {}", &audio_path);
+            while let Ok(request) = rx.recv() {
                 let playback_config = config.read().expect("speaker config poisoned").clone();
-                let audio = decode_audio_file(&audio_path)?;
+                let audio = match request {
+                    PlaybackRequest::File(audio_path) => {
+                        info!("play audio: {}", &audio_path);
+                        decode_audio_file(&audio_path)?
+                    }
+                    PlaybackRequest::Samples(audio) => audio,
+                };
 
                 let local_sink = if playback_config.monitor_local_playback {
                     create_sink(local_stream.as_ref(), &audio, |sink| {
@@ -160,10 +170,24 @@ impl Speaker {
 
     pub fn play_wav(&self, path: &str) -> Result<()> {
         if Path::new(path).exists() {
-            self.tx.send(path.to_string())?;
+            self.tx.send(PlaybackRequest::File(path.to_string()))?;
         } else {
             warn!("audio file not found: {}", path)
         }
+        Ok(())
+    }
+
+    pub fn play_pcm_f32(
+        &self,
+        channels: u16,
+        sample_rate: u32,
+        samples: Vec<f32>,
+    ) -> Result<()> {
+        self.tx.send(PlaybackRequest::Samples(DecodedAudio {
+            channels,
+            sample_rate,
+            samples,
+        }))?;
         Ok(())
     }
 }

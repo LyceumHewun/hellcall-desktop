@@ -1,19 +1,13 @@
-use crate::hellcall::config::AiConfig;
+use crate::hellcall::config::AiLlmProviderConfig;
 use futures_util::StreamExt;
-use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
-
-const DEFAULT_TTS_VOICE: &str = "FunAudioLLM/CosyVoice2-0.5B:alex";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AiTranscriptionResult {
     pub session_id: String,
     pub transcript: String,
-    pub audio_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,11 +28,6 @@ pub struct ChatToolFunction {
 pub struct ChatStreamResult {
     pub content: String,
     pub tool_calls: Vec<ChatToolCall>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AudioTranscriptionResponse {
-    text: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,110 +69,19 @@ struct PartialToolCall {
     arguments: String,
 }
 
-pub async fn transcribe_audio(ai_config: &AiConfig, audio_path: &Path) -> Result<String, String> {
-    let api_key = ai_config.api_key.trim();
-    if api_key.is_empty() {
-        return Err("AI API key is empty. Please fill it in the AI models tab.".to_string());
-    }
-
-    let url = format!(
-        "{}/audio/transcriptions",
-        ai_config.base_url.trim_end_matches('/')
-    );
-
-    let file_bytes = fs::read(audio_path).map_err(|e| e.to_string())?;
-    let file_part = Part::bytes(file_bytes)
-        .file_name("recording.wav")
-        .mime_str("audio/wav")
-        .map_err(|e| e.to_string())?;
-
-    let form = Form::new()
-        .text("model", ai_config.default_asr_model.clone())
-        .part("file", file_part);
-
-    let response = reqwest::Client::new()
-        .post(url)
-        .bearer_auth(api_key)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("ASR request failed with {}: {}", status, body));
-    }
-
-    let body = response
-        .json::<AudioTranscriptionResponse>()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(body.text.trim().to_string())
-}
-
-pub async fn synthesize_speech(
-    ai_config: &AiConfig,
-    input: &str,
-) -> Result<Vec<u8>, String> {
-    let api_key = ai_config.api_key.trim();
-    if api_key.is_empty() {
-        return Err("AI API key is empty. Please fill it in the AI models tab.".to_string());
-    }
-
-    let model = ai_config.default_tts_model.trim();
-    if model.is_empty() {
-        return Err("AI TTS model is empty. Please fill it in the AI models tab.".to_string());
-    }
-
-    let text = input.trim();
-    if text.is_empty() {
-        return Err("AI TTS input text is empty.".to_string());
-    }
-
-    let url = format!("{}/audio/speech", ai_config.base_url.trim_end_matches('/'));
-    let body = json!({
-        "model": model,
-        "input": text,
-        "voice": DEFAULT_TTS_VOICE,
-        "response_format": "wav",
-        "stream": true,
-        "speed": 1.0,
-        "gain": 0.0
-    });
-
-    let response = reqwest::Client::new()
-        .post(url)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("TTS request failed with {}: {}", status, body));
-    }
-
-    let audio_bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    Ok(audio_bytes.to_vec())
-}
-
 pub async fn stream_chat_completion(
-    ai_config: &AiConfig,
+    provider: &AiLlmProviderConfig,
     body: Value,
     mut on_delta: impl FnMut(&str) -> Result<(), String>,
 ) -> Result<ChatStreamResult, String> {
-    let api_key = ai_config.api_key.trim();
+    let api_key = provider.api_key.trim();
     if api_key.is_empty() {
-        return Err("AI API key is empty. Please fill it in the AI models tab.".to_string());
+        return Err("LLM API key is empty. Please fill it in the AI models tab.".to_string());
     }
 
     let url = format!(
         "{}/chat/completions",
-        ai_config.base_url.trim_end_matches('/')
+        provider.base_url.trim_end_matches('/')
     );
 
     let response = reqwest::Client::new()

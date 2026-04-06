@@ -1,5 +1,39 @@
 export type TalkMode = "push_to_talk" | "voice_activation";
 export type AppMode = "voice_command" | "ai_agent";
+export type AiLlmProviderKind = "siliconflow" | "openai_compatible";
+
+export interface AiLlmProviderConfig {
+  id: string;
+  name: string;
+  kind: AiLlmProviderKind;
+  base_url: string;
+  api_key: string;
+  chat_model: string;
+  is_builtin: boolean;
+}
+
+export interface AiLlmConfig {
+  selected_provider_id: string;
+  providers: AiLlmProviderConfig[];
+}
+
+export interface AiSpeechSttConfig {
+  model_id: string;
+  language: string;
+  use_itn: boolean;
+}
+
+export interface AiSpeechTtsConfig {
+  enabled: boolean;
+  model_id: string;
+  speaker_id: number;
+  speed: number;
+}
+
+export interface AiSpeechConfig {
+  stt: AiSpeechSttConfig;
+  tts: AiSpeechTtsConfig;
+}
 
 export interface AiAgentConfig {
   id: string;
@@ -15,13 +49,8 @@ export interface AiAgentConfig {
 }
 
 export interface AiConfig {
-  provider: string;
-  base_url: string;
-  api_key: string;
-  default_chat_model: string;
-  default_asr_model: string;
-  tts_enabled: boolean;
-  default_tts_model: string;
+  llm: AiLlmConfig;
+  speech: AiSpeechConfig;
   auto_execute_skills: boolean;
   default_agent_id: string;
   agents: AiAgentConfig[];

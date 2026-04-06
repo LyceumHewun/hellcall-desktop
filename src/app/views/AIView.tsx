@@ -8,6 +8,7 @@ import { useConfigStore } from "../../store/configStore";
 import { useAiStore } from "../../store/aiStore";
 import { useEngineStore } from "../../store/engineStore";
 import { AiLiveToolActivity, AiSessionEvent } from "../../types/ai";
+import { AssetModelSelector } from "../components/AssetModelSelector";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -29,6 +30,8 @@ const AVAILABLE_SKILLS = [
   "list_stratagems",
   "get_key_mappings",
 ];
+
+const NOOP = () => undefined;
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleString();
@@ -246,7 +249,6 @@ export function AIView() {
     const transcriptPromise = listen<{
       session_id: string;
       transcript: string;
-      audio_path: string;
     }>("ai-transcription-ready", async (event) => {
       if (!mounted) {
         return;
@@ -451,6 +453,20 @@ export function AIView() {
     );
   }, [config]);
 
+  const currentProvider = useMemo(() => {
+    if (!config) {
+      return null;
+    }
+
+    return (
+      config.ai.llm.providers.find(
+        (provider) => provider.id === config.ai.llm.selected_provider_id,
+      ) ??
+      config.ai.llm.providers[0] ??
+      null
+    );
+  }, [config]);
+
   const hasConversationContent =
     (currentSession?.events.length ?? 0) > 0 ||
     liveToolActivities.length > 0 ||
@@ -472,6 +488,24 @@ export function AIView() {
     });
   };
 
+  const updateCurrentProvider = (
+    updater: (draft: NonNullable<typeof currentProvider>) => void,
+  ) => {
+    if (!currentProvider) {
+      return;
+    }
+
+    updateConfig((draft) => {
+      const target = draft.ai.llm.providers.find(
+        (provider) => provider.id === currentProvider.id,
+      );
+      if (!target) {
+        return;
+      }
+      updater(target as NonNullable<typeof currentProvider>);
+    });
+  };
+
   const addAgent = () => {
     if (!config) {
       return;
@@ -484,7 +518,7 @@ export function AIView() {
         name: t("ai.agent.new_name"),
         description: t("ai.agent.new_description"),
         system_prompt: t("ai.agent.new_prompt"),
-        chat_model: draft.ai.default_chat_model,
+        chat_model: "",
         temperature: 0.7,
         max_tokens: 2048,
         enable_thinking: false,
@@ -503,6 +537,44 @@ export function AIView() {
     updateConfig((draft) => {
       draft.ai.agents = draft.ai.agents.filter((agent) => agent.id !== currentAgent.id);
       draft.ai.default_agent_id = draft.ai.agents[0]?.id ?? "";
+    });
+  };
+
+  const addProvider = () => {
+    if (!config) {
+      return;
+    }
+
+    const nextId = crypto.randomUUID();
+    updateConfig((draft) => {
+      draft.ai.llm.providers.push({
+        id: nextId,
+        name: "Custom Provider",
+        kind: "openai_compatible",
+        base_url: "https://api.openai.com/v1",
+        api_key: "",
+        chat_model: "",
+        is_builtin: false,
+      });
+      draft.ai.llm.selected_provider_id = nextId;
+    });
+  };
+
+  const deleteCurrentProvider = () => {
+    if (
+      !config ||
+      !currentProvider ||
+      currentProvider.is_builtin ||
+      config.ai.llm.providers.length <= 1
+    ) {
+      return;
+    }
+
+    updateConfig((draft) => {
+      draft.ai.llm.providers = draft.ai.llm.providers.filter(
+        (provider) => provider.id !== currentProvider.id,
+      );
+      draft.ai.llm.selected_provider_id = draft.ai.llm.providers[0]?.id ?? "";
     });
   };
 
@@ -924,54 +996,50 @@ export function AIView() {
               <div className="space-y-4">
                 <Card className="border-white/10 bg-[#1A1D24] text-white">
                   <CardHeader>
-                    <CardTitle className="text-[#FCE100]">{t("ai.models.title")}</CardTitle>
+                    <CardTitle className="text-[#FCE100]">
+                      {t("ai.models.speech_title")}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <AssetModelSelector
+                      label={t("ai.models.stt_model")}
+                      placeholder={t("ai.models.stt_model")}
+                      fetchCommand="get_available_sherpa_stt_models"
+                      downloadCommand="download_sherpa_stt_model"
+                      progressEventName="sherpa-stt-download-progress"
+                      selectedModelId={config.ai.speech.stt.model_id}
+                      setSelectedModelId={(modelId) =>
+                        updateConfig((draft) => {
+                          draft.ai.speech.stt.model_id = modelId;
+                        })
+                      }
+                      setSelectedModelReady={NOOP}
+                      formatModelName={(id) => id}
+                    />
                     <div className="space-y-2">
-                      <Label>{t("ai.models.base_url")}</Label>
+                      <Label>{t("ai.models.stt_language")}</Label>
                       <Input
                         className="bg-black/30 border-white/10"
-                        value={config.ai.base_url}
+                        value={config.ai.speech.stt.language}
                         onChange={(event) =>
                           updateConfig((draft) => {
-                            draft.ai.base_url = event.target.value;
+                            draft.ai.speech.stt.language = event.target.value;
                           })
                         }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>{t("ai.models.api_key")}</Label>
-                      <Input
-                        type="password"
-                        className="bg-black/30 border-white/10"
-                        value={config.ai.api_key}
-                        onChange={(event) =>
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
+                      <div>
+                        <p className="text-sm text-white">{t("ai.models.stt_use_itn")}</p>
+                        <p className="text-xs text-white/45">
+                          {t("ai.models.stt_use_itn_hint")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={config.ai.speech.stt.use_itn}
+                        onCheckedChange={(checked) =>
                           updateConfig((draft) => {
-                            draft.ai.api_key = event.target.value;
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("ai.models.chat_model")}</Label>
-                      <Input
-                        className="bg-black/30 border-white/10"
-                        value={config.ai.default_chat_model}
-                        onChange={(event) =>
-                          updateConfig((draft) => {
-                            draft.ai.default_chat_model = event.target.value;
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("ai.models.asr_model")}</Label>
-                      <Input
-                        className="bg-black/30 border-white/10"
-                        value={config.ai.default_asr_model}
-                        onChange={(event) =>
-                          updateConfig((draft) => {
-                            draft.ai.default_asr_model = event.target.value;
+                            draft.ai.speech.stt.use_itn = checked;
                           })
                         }
                       />
@@ -984,26 +1052,191 @@ export function AIView() {
                         </p>
                       </div>
                       <Switch
-                        checked={config.ai.tts_enabled}
+                        checked={config.ai.speech.tts.enabled}
                         onCheckedChange={(checked) =>
                           updateConfig((draft) => {
-                            draft.ai.tts_enabled = checked;
+                            draft.ai.speech.tts.enabled = checked;
                           })
                         }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>{t("ai.models.tts_model")}</Label>
-                      <Input
-                        className="bg-black/30 border-white/10"
-                        value={config.ai.default_tts_model}
-                        onChange={(event) =>
+                    <AssetModelSelector
+                      label={t("ai.models.tts_model")}
+                      placeholder={t("ai.models.tts_model")}
+                      fetchCommand="get_available_sherpa_tts_models"
+                      downloadCommand="download_sherpa_tts_model"
+                      progressEventName="sherpa-tts-download-progress"
+                      selectedModelId={config.ai.speech.tts.model_id}
+                      setSelectedModelId={(modelId) =>
+                        updateConfig((draft) => {
+                          draft.ai.speech.tts.model_id = modelId;
+                        })
+                      }
+                      setSelectedModelReady={NOOP}
+                      formatModelName={(id) => id}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>{t("ai.models.tts_speaker_id")}</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="bg-black/30 border-white/10"
+                          value={config.ai.speech.tts.speaker_id}
+                          onChange={(event) =>
+                            updateConfig((draft) => {
+                              draft.ai.speech.tts.speaker_id = Number(
+                                event.target.value,
+                              );
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t("ai.models.tts_speed")}</Label>
+                        <Input
+                          type="number"
+                          min={0.5}
+                          max={2}
+                          step={0.1}
+                          className="bg-black/30 border-white/10"
+                          value={config.ai.speech.tts.speed}
+                          onChange={(event) =>
+                            updateConfig((draft) => {
+                              draft.ai.speech.tts.speed = Number(
+                                event.target.value,
+                              );
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-[#1A1D24] text-white">
+                  <CardHeader>
+                    <CardTitle className="text-[#FCE100]">
+                      {t("ai.models.llm_title")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-2">
+                      <Select
+                        value={config.ai.llm.selected_provider_id}
+                        onValueChange={(value) =>
                           updateConfig((draft) => {
-                            draft.ai.default_tts_model = event.target.value;
+                            draft.ai.llm.selected_provider_id = value;
                           })
                         }
-                      />
+                      >
+                        <SelectTrigger className="min-w-0 flex-1 bg-black/30 text-white">
+                          <SelectValue placeholder={t("ai.models.provider_select")} />
+                        </SelectTrigger>
+                        <SelectContent className="border-white/10 bg-[#1E2128] text-white">
+                          {config.ai.llm.providers.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              {provider.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <Button
+                        variant="outline"
+                        className="cursor-pointer border-white/10 bg-black/20 hover:bg-white/10"
+                        onClick={addProvider}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="cursor-pointer border-white/10 bg-black/20 hover:bg-red-500/10 hover:text-red-300"
+                        disabled={
+                          !currentProvider ||
+                          currentProvider.is_builtin ||
+                          config.ai.llm.providers.length <= 1
+                        }
+                        onClick={deleteCurrentProvider}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
+
+                    {currentProvider ? (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>{t("ai.models.provider_name")}</Label>
+                          <Input
+                            className="bg-black/30 border-white/10"
+                            value={currentProvider.name}
+                            onChange={(event) =>
+                              updateCurrentProvider((draft) => {
+                                draft.name = event.target.value;
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("ai.models.provider_kind")}</Label>
+                          <Select
+                            value={currentProvider.kind}
+                            onValueChange={(value: "siliconflow" | "openai_compatible") =>
+                              updateCurrentProvider((draft) => {
+                                draft.kind = value;
+                              })
+                            }
+                          >
+                            <SelectTrigger className="bg-black/30 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="border-white/10 bg-[#1E2128] text-white">
+                              <SelectItem value="siliconflow">SiliconFlow</SelectItem>
+                              <SelectItem value="openai_compatible">
+                                OpenAI Compatible
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("ai.models.base_url")}</Label>
+                          <Input
+                            className="bg-black/30 border-white/10"
+                            value={currentProvider.base_url}
+                            onChange={(event) =>
+                              updateCurrentProvider((draft) => {
+                                draft.base_url = event.target.value;
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("ai.models.api_key")}</Label>
+                          <Input
+                            type="password"
+                            className="bg-black/30 border-white/10"
+                            value={currentProvider.api_key}
+                            onChange={(event) =>
+                              updateCurrentProvider((draft) => {
+                                draft.api_key = event.target.value;
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t("ai.models.chat_model")}</Label>
+                          <Input
+                            className="bg-black/30 border-white/10"
+                            value={currentProvider.chat_model}
+                            onChange={(event) =>
+                              updateCurrentProvider((draft) => {
+                                draft.chat_model = event.target.value;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
 

@@ -214,13 +214,23 @@
     },
     "models": {
       "title": "Models",
+      "speech_title": "Local Speech",
+      "llm_title": "LLM Provider",
+      "provider_select": "Select Provider",
+      "provider_name": "Provider Name",
+      "provider_kind": "Provider Type",
       "base_url": "Base URL",
       "api_key": "API Key",
       "chat_model": "Chat Model",
-      "asr_model": "ASR Model",
+      "stt_model": "STT Model",
+      "stt_language": "Recognition Language",
+      "stt_use_itn": "Enable ITN",
+      "stt_use_itn_hint": "Normalize numbers, dates, and similar text into a cleaner transcript.",
       "tts_enabled": "Enable TTS Playback",
-      "tts_enabled_hint": "Automatically synthesize and play the final assistant reply with a fixed system voice.",
-      "tts_model": "TTS Model"
+      "tts_enabled_hint": "Use local sherpa-onnx TTS to synthesize and play the final assistant reply.",
+      "tts_model": "TTS Model",
+      "tts_speaker_id": "Speaker ID",
+      "tts_speed": "Speech Speed"
     }
   },
   "stratagems": {

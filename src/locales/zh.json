@@ -214,13 +214,23 @@
     },
     "models": {
       "title": "模型配置",
+      "speech_title": "本地语音",
+      "llm_title": "LLM 提供商",
+      "provider_select": "选择提供商",
+      "provider_name": "提供商名称",
+      "provider_kind": "提供商类型",
       "base_url": "接口地址",
       "api_key": "API Key",
       "chat_model": "聊天模型",
-      "asr_model": "ASR 模型",
+      "stt_model": "STT 模型",
+      "stt_language": "识别语言",
+      "stt_use_itn": "启用 ITN",
+      "stt_use_itn_hint": "将数字、时间等内容整理成更自然的文本格式。",
       "tts_enabled": "启用 TTS 播报",
-      "tts_enabled_hint": "助手回复完成后自动合成并播放固定系统音色语音。",
-      "tts_model": "TTS 模型"
+      "tts_enabled_hint": "助手回复完成后，使用本地 sherpa-onnx 语音合成并直接播放。",
+      "tts_model": "TTS 模型",
+      "tts_speaker_id": "Speaker ID",
+      "tts_speed": "语速"
     }
   },
   "stratagems": {

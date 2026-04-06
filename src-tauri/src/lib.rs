@@ -5,18 +5,19 @@ mod stratagems;
 mod utils;
 
 use ai::types::{AiSessionEvent, AiSessionRecord, AiSessionSummary};
-use asset_manager::{vision_model_manager, vosk_model_manager};
-use hellcall::config::{AiConfig, MicrophoneConfig, SpeakerConfig};
+use asset_manager::{
+    sherpa_model_manager, vision_model_manager, vosk_model_manager,
+};
+use hellcall::config::{AiConfig, AiLlmProviderConfig, MicrophoneConfig, SpeakerConfig};
 use hellcall::core::keypress::{Input, KeyPresser, LocalKey};
 use hellcall::core::speaker::Speaker;
-use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use hellcall::core::microphone::{
     open_input_stream, open_volume_meter_stream, resolve_input_device_name,
     run_processed_audio_pipeline, validate_virtual_output_device_for_mix,
 };
+use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -100,7 +101,6 @@ struct AiChatStatePayload {
 struct AiTranscriptionEventPayload {
     session_id: String,
     transcript: String,
-    audio_path: String,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -138,6 +138,7 @@ struct AppState {
     ai_recording: Mutex<Option<AiRecordingCapture>>,
     ai_hotkey_bridge: Mutex<Option<AiHotkeyBridge>>,
     ai_speaker: Mutex<Option<AiSpeakerBridge>>,
+    ai_sherpa: Mutex<Option<ai::sherpa::SherpaSpeechRuntime>>,
     ai_streaming: Mutex<bool>,
 }
 
@@ -249,66 +250,6 @@ fn append_ai_session_event(
     Ok(())
 }
 
-fn resolve_ai_recordings_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("ai_recordings");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
-}
-
-fn resolve_ai_tts_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("ai_tts");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
-}
-
-fn write_pcm16_wav(path: &std::path::Path, sample_rate: u32, samples: &[i16]) -> Result<(), String> {
-    let channels: u16 = 1;
-    let bits_per_sample: u16 = 16;
-    let byte_rate = sample_rate * channels as u32 * (bits_per_sample as u32 / 8);
-    let block_align = channels * (bits_per_sample / 8);
-    let data_size = (samples.len() * std::mem::size_of::<i16>()) as u32;
-    let riff_size = 36 + data_size;
-
-    let mut file = fs::File::create(path).map_err(|e| e.to_string())?;
-    file.write_all(b"RIFF").map_err(|e| e.to_string())?;
-    file.write_all(&riff_size.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(b"WAVE").map_err(|e| e.to_string())?;
-    file.write_all(b"fmt ").map_err(|e| e.to_string())?;
-    file.write_all(&16u32.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&1u16.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&channels.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&sample_rate.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&byte_rate.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&block_align.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(&bits_per_sample.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-    file.write_all(b"data").map_err(|e| e.to_string())?;
-    file.write_all(&data_size.to_le_bytes())
-        .map_err(|e| e.to_string())?;
-
-    for sample in samples {
-        file.write_all(&sample.to_le_bytes())
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
-
 fn create_session_if_missing(app_handle: &AppHandle, runtime: &mut AiRuntimeConfig) -> Result<String, String> {
     let _ = app_handle;
     if runtime.session_id.as_deref() != Some(DEFAULT_AI_SESSION_ID) {
@@ -411,7 +352,7 @@ fn sync_ai_speaker_bridge(
 ) -> Result<(), String> {
     let mut speaker_guard = state.ai_speaker.lock().map_err(|e| e.to_string())?;
 
-    if runtime.mode != hellcall::config::AppMode::AiAgent || !runtime.ai_config.tts_enabled {
+    if runtime.mode != hellcall::config::AppMode::AiAgent || !runtime.ai_config.speech.tts.enabled {
         *speaker_guard = None;
         return Ok(());
     }
@@ -533,14 +474,17 @@ fn stop_ai_recording_blocking(
         return Err("No microphone audio was captured.".to_string());
     }
 
-    let recordings_dir = resolve_ai_recordings_dir(app_handle)?;
-    let audio_path = recordings_dir.join(format!("recording-{}.wav", now_ms()));
-    write_pcm16_wav(&audio_path, 16_000, &samples)?;
+    let transcript = {
+        let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
+        if sherpa_guard.is_none() {
+            sherpa_guard.replace(ai::sherpa::SherpaSpeechRuntime::new(app_handle)?);
+        }
 
-    let transcript = tauri::async_runtime::block_on(ai::client::transcribe_audio(
-        &runtime.ai_config,
-        &audio_path,
-    ))?;
+        let sherpa = sherpa_guard
+            .as_mut()
+            .ok_or_else(|| "Sherpa speech runtime is unavailable.".to_string())?;
+        sherpa.transcribe(app_handle, &runtime.ai_config, &samples, 16_000)?
+    };
 
     if transcript.is_empty() {
         return Err("ASR returned an empty transcript.".to_string());
@@ -564,14 +508,12 @@ fn stop_ai_recording_blocking(
     let result = ai::client::AiTranscriptionResult {
         session_id: session_id.clone(),
         transcript,
-        audio_path: utils::normalize_runtime_path(&audio_path),
     };
     let _ = app_handle.emit(
         "ai-transcription-ready",
         AiTranscriptionEventPayload {
             session_id: result.session_id.clone(),
             transcript: result.transcript.clone(),
-            audio_path: result.audio_path.clone(),
         },
     );
 
@@ -765,6 +707,17 @@ fn current_ai_agent(runtime: &AiRuntimeConfig) -> Result<hellcall::config::AiAge
         .cloned()
         .or_else(|| runtime.ai_config.agents.first().cloned())
         .ok_or_else(|| "No AI agent is configured.".to_string())
+}
+
+fn selected_ai_provider(ai_config: &AiConfig) -> Result<AiLlmProviderConfig, String> {
+    ai_config
+        .llm
+        .providers
+        .iter()
+        .find(|provider| provider.id == ai_config.llm.selected_provider_id)
+        .cloned()
+        .or_else(|| ai_config.llm.providers.first().cloned())
+        .ok_or_else(|| "No LLM provider is configured.".to_string())
 }
 
 fn execute_tool_call(
@@ -963,6 +916,7 @@ async fn run_ai_chat_pipeline(
 ) -> Result<String, String> {
     let state = app_handle.state::<AppState>();
     let agent = current_ai_agent(&runtime)?;
+    let provider = selected_ai_provider(&runtime.ai_config)?;
     let mut messages = build_chat_messages(&app_handle, &agent)?;
     let tools = build_skill_tools(&agent);
 
@@ -974,7 +928,11 @@ async fn run_ai_chat_pipeline(
         }
 
         let body = ai::client::build_chat_request_body(
-            &agent.chat_model,
+            if agent.chat_model.trim().is_empty() {
+                &provider.chat_model
+            } else {
+                &agent.chat_model
+            },
             messages.clone(),
             tools.clone(),
             agent.temperature,
@@ -983,7 +941,7 @@ async fn run_ai_chat_pipeline(
         );
 
         let mut streamed_text = String::new();
-        let stream_result = ai::client::stream_chat_completion(&runtime.ai_config, body, |delta| {
+        let stream_result = ai::client::stream_chat_completion(&provider, body, |delta| {
             streamed_text.push_str(delta);
             emit_ai_chat_delta(&app_handle, &session_id, delta);
             Ok(())
@@ -1053,21 +1011,24 @@ async fn synthesize_ai_tts_and_play(
     runtime: &AiRuntimeConfig,
     text: &str,
 ) -> Result<(), String> {
-    if !runtime.ai_config.tts_enabled || text.trim().is_empty() {
+    if !runtime.ai_config.speech.tts.enabled || text.trim().is_empty() {
         return Ok(());
     }
 
     let state = app_handle.state::<AppState>();
     sync_ai_speaker_bridge(&state, runtime)?;
 
-    let audio_bytes = ai::client::synthesize_speech(&runtime.ai_config, text).await?;
-    if audio_bytes.is_empty() {
-        return Err("TTS request returned empty audio.".to_string());
-    }
+    let generated_audio = {
+        let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
+        if sherpa_guard.is_none() {
+            sherpa_guard.replace(ai::sherpa::SherpaSpeechRuntime::new(app_handle)?);
+        }
 
-    let tts_dir = resolve_ai_tts_dir(app_handle)?;
-    let audio_path = tts_dir.join(format!("tts-{}.wav", now_ms()));
-    fs::write(&audio_path, audio_bytes).map_err(|e| e.to_string())?;
+        let sherpa = sherpa_guard
+            .as_mut()
+            .ok_or_else(|| "Sherpa speech runtime is unavailable.".to_string())?;
+        sherpa.synthesize(app_handle, &runtime.ai_config, text)?
+    };
 
     let speaker_guard = state.ai_speaker.lock().map_err(|e| e.to_string())?;
     let Some(bridge) = speaker_guard.as_ref() else {
@@ -1076,7 +1037,7 @@ async fn synthesize_ai_tts_and_play(
 
     bridge
         .speaker
-        .play_wav(audio_path.to_str().unwrap_or_default())
+        .play_pcm_f32(1, generated_audio.sample_rate as u32, generated_audio.samples)
         .map_err(|e| utils::format_and_log_error("Failed to play AI TTS audio", e))?;
 
     Ok(())
@@ -1087,6 +1048,20 @@ fn get_available_vosk_models(
     app_handle: AppHandle,
 ) -> Result<Vec<vosk_model_manager::AvailableVoskModel>, String> {
     vosk_model_manager::get_available_models(&app_handle)
+}
+
+#[tauri::command]
+fn get_available_sherpa_stt_models(
+    app_handle: AppHandle,
+) -> Result<Vec<sherpa_model_manager::AvailableSherpaModel>, String> {
+    sherpa_model_manager::get_available_stt_models(&app_handle)
+}
+
+#[tauri::command]
+fn get_available_sherpa_tts_models(
+    app_handle: AppHandle,
+) -> Result<Vec<sherpa_model_manager::AvailableSherpaModel>, String> {
+    sherpa_model_manager::get_available_tts_models(&app_handle)
 }
 
 #[tauri::command]
@@ -1103,6 +1078,24 @@ async fn download_vosk_model(
     url: String,
 ) -> Result<bool, String> {
     vosk_model_manager::download_model(&app_handle, model_id, url).await
+}
+
+#[tauri::command]
+async fn download_sherpa_stt_model(
+    app_handle: AppHandle,
+    model_id: String,
+    url: String,
+) -> Result<bool, String> {
+    sherpa_model_manager::download_stt_model(&app_handle, model_id, url).await
+}
+
+#[tauri::command]
+async fn download_sherpa_tts_model(
+    app_handle: AppHandle,
+    model_id: String,
+    url: String,
+) -> Result<bool, String> {
+    sherpa_model_manager::download_tts_model(&app_handle, model_id, url).await
 }
 
 #[tauri::command]
@@ -1394,6 +1387,13 @@ fn sync_ai_runtime(
     };
 
     configure_ai_hotkey_bridge(&app_handle, &state, &config)?;
+    {
+        let mut sherpa_guard = state.ai_sherpa.lock().map_err(|e| e.to_string())?;
+        if let Some(runtime) = sherpa_guard.as_mut() {
+            runtime.invalidate_models();
+        }
+        *sherpa_guard = None;
+    }
     sync_ai_speaker_bridge(&state, &runtime_snapshot)
 }
 
@@ -1481,12 +1481,17 @@ pub fn run() {
             ai_recording: Mutex::new(None),
             ai_hotkey_bridge: Mutex::new(None),
             ai_speaker: Mutex::new(None),
+            ai_sherpa: Mutex::new(None),
             ai_streaming: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
+            get_available_sherpa_stt_models,
+            get_available_sherpa_tts_models,
             get_available_vision_models,
             download_vosk_model,
+            download_sherpa_stt_model,
+            download_sherpa_tts_model,
             download_vision_model,
             get_audio_devices,
             get_output_audio_devices,
