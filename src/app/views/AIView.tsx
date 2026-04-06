@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Plus, Trash2, Waves } from "lucide-react";
@@ -31,7 +31,8 @@ const AVAILABLE_SKILLS = [
   "get_key_mappings",
 ];
 
-const NOOP = () => undefined;
+const NOOP = (..._args: unknown[]) => undefined;
+const SHERPA_RUNTIME_ID = "sherpa-onnx-v1.12.9-win-x64-shared";
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleString();
@@ -177,6 +178,9 @@ export function AIView() {
   const { t } = useTranslation();
   const { config, updateConfig } = useConfigStore();
   const selectedDevice = useEngineStore((state) => state.selectedDevice);
+  const [runtimeReady, setRuntimeReady] = useState<boolean | null>(null);
+  const [sttReady, setSttReady] = useState<boolean | null>(null);
+  const [ttsReady, setTtsReady] = useState<boolean | null>(null);
   const {
     currentSessionId,
     currentSession,
@@ -222,6 +226,130 @@ export function AIView() {
       setError(message);
     });
   }, [config, currentSessionId, selectedDevice, setError, t]);
+
+  useEffect(() => {
+    if (!config || config.mode !== "ai_agent") {
+      setRuntimeReady(null);
+      setSttReady(null);
+      setTtsReady(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshSpeechAssetStatus = async () => {
+      try {
+        const [runtimePackages, sttModels, ttsModels] = await Promise.all([
+          invoke<Array<{ id: string; is_downloaded: boolean }>>(
+            "get_available_sherpa_runtime",
+          ),
+          invoke<Array<{ id: string; is_downloaded: boolean }>>(
+            "get_available_sherpa_stt_models",
+          ),
+          invoke<Array<{ id: string; is_downloaded: boolean }>>(
+            "get_available_sherpa_tts_models",
+          ),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const runtimePackage = runtimePackages.find(
+          (item) => item.id === SHERPA_RUNTIME_ID,
+        );
+        const sttModel = sttModels.find(
+          (item) => item.id === config.ai.speech.stt.model_id,
+        );
+        const ttsModel = ttsModels.find(
+          (item) => item.id === config.ai.speech.tts.model_id,
+        );
+
+        setRuntimeReady(Boolean(runtimePackage?.is_downloaded));
+        setSttReady(Boolean(sttModel?.is_downloaded));
+        setTtsReady(Boolean(ttsModel?.is_downloaded));
+      } catch (statusError) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error("Failed to load sherpa asset status:", statusError);
+        setRuntimeReady(false);
+        setSttReady(false);
+        setTtsReady(false);
+      }
+    };
+
+    void refreshSpeechAssetStatus();
+
+    let unlistenRuntime: UnlistenFn | null = null;
+    let unlistenStt: UnlistenFn | null = null;
+    let unlistenTts: UnlistenFn | null = null;
+
+    const runtimePromise = listen<{ status: string }>(
+      "sherpa-runtime-download-progress",
+      (event) => {
+        if (
+          event.payload.status === "Complete" ||
+          event.payload.status.startsWith("Failed:")
+        ) {
+          void refreshSpeechAssetStatus();
+        }
+      },
+    ).then((fn) => {
+      unlistenRuntime = fn;
+      return fn;
+    });
+
+    const sttPromise = listen<{ status: string }>(
+      "sherpa-stt-download-progress",
+      (event) => {
+        if (
+          event.payload.status === "Complete" ||
+          event.payload.status.startsWith("Failed:")
+        ) {
+          void refreshSpeechAssetStatus();
+        }
+      },
+    ).then((fn) => {
+      unlistenStt = fn;
+      return fn;
+    });
+
+    const ttsPromise = listen<{ status: string }>(
+      "sherpa-tts-download-progress",
+      (event) => {
+        if (
+          event.payload.status === "Complete" ||
+          event.payload.status.startsWith("Failed:")
+        ) {
+          void refreshSpeechAssetStatus();
+        }
+      },
+    ).then((fn) => {
+      unlistenTts = fn;
+      return fn;
+    });
+
+    return () => {
+      cancelled = true;
+      if (unlistenRuntime) {
+        unlistenRuntime();
+      } else {
+        runtimePromise.then((fn) => fn());
+      }
+      if (unlistenStt) {
+        unlistenStt();
+      } else {
+        sttPromise.then((fn) => fn());
+      }
+      if (unlistenTts) {
+        unlistenTts();
+      } else {
+        ttsPromise.then((fn) => fn());
+      }
+    };
+  }, [config]);
 
   useEffect(() => {
     let mounted = true;
@@ -471,6 +599,9 @@ export function AIView() {
     (currentSession?.events.length ?? 0) > 0 ||
     liveToolActivities.length > 0 ||
     Boolean(streamingText);
+  const requiresSpeechDownload = runtimeReady === false || sttReady === false;
+  const showTtsDownloadHint =
+    Boolean(config?.ai.speech.tts.enabled) && ttsReady === false;
 
   const updateCurrentAgent = (
     updater: (draft: NonNullable<typeof currentAgent>) => void,
@@ -776,12 +907,28 @@ export function AIView() {
                     <p className="text-sm text-white/75">{lastTranscript}</p>
                   </div>
                 ) : null}
+                {runtimeReady === false ? (
+                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                    {t("ai.models.runtime_required")}
+                  </div>
+                ) : null}
+                {sttReady === false ? (
+                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                    {t("ai.models.stt_required")}
+                  </div>
+                ) : null}
+                {showTtsDownloadHint ? (
+                  <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                    {t("ai.models.tts_required")}
+                  </div>
+                ) : null}
                 <Button
                   className={`w-full text-black ${
                     isRecording
                       ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
                       : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
                   }`}
+                  disabled={requiresSpeechDownload}
                   onMouseDown={() => void startManualRecording()}
                   onMouseUp={() => void stopManualRecording()}
                   onMouseLeave={() => void stopManualRecording()}
@@ -1002,6 +1149,17 @@ export function AIView() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <AssetModelSelector
+                      label={t("ai.models.runtime_package")}
+                      placeholder={t("ai.models.runtime_package")}
+                      fetchCommand="get_available_sherpa_runtime"
+                      downloadCommand="download_sherpa_runtime"
+                      progressEventName="sherpa-runtime-download-progress"
+                      selectedModelId={SHERPA_RUNTIME_ID}
+                      setSelectedModelId={NOOP}
+                      setSelectedModelReady={setRuntimeReady}
+                      formatModelName={(id) => id}
+                    />
+                    <AssetModelSelector
                       label={t("ai.models.stt_model")}
                       placeholder={t("ai.models.stt_model")}
                       fetchCommand="get_available_sherpa_stt_models"
@@ -1013,7 +1171,7 @@ export function AIView() {
                           draft.ai.speech.stt.model_id = modelId;
                         })
                       }
-                      setSelectedModelReady={NOOP}
+                      setSelectedModelReady={setSttReady}
                       formatModelName={(id) => id}
                     />
                     <div className="space-y-2">
@@ -1072,7 +1230,7 @@ export function AIView() {
                           draft.ai.speech.tts.model_id = modelId;
                         })
                       }
-                      setSelectedModelReady={NOOP}
+                      setSelectedModelReady={setTtsReady}
                       formatModelName={(id) => id}
                     />
                     <div className="grid grid-cols-2 gap-3">
@@ -1111,6 +1269,21 @@ export function AIView() {
                         />
                       </div>
                     </div>
+                    {runtimeReady === false ? (
+                      <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                        {t("ai.models.runtime_required")}
+                      </div>
+                    ) : null}
+                    {sttReady === false ? (
+                      <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                        {t("ai.models.stt_required")}
+                      </div>
+                    ) : null}
+                    {showTtsDownloadHint ? (
+                      <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100/90">
+                        {t("ai.models.tts_required")}
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
 

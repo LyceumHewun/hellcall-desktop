@@ -222,13 +222,17 @@
       "base_url": "Base URL",
       "api_key": "API Key",
       "chat_model": "Chat Model",
+      "runtime_package": "Sherpa Runtime",
+      "runtime_required": "Download the Sherpa runtime before using local AI speech features.",
       "stt_model": "STT Model",
       "stt_language": "Recognition Language",
       "stt_use_itn": "Enable ITN",
       "stt_use_itn_hint": "Normalize numbers, dates, and similar text into a cleaner transcript.",
+      "stt_required": "Download the selected STT model before starting AI speech recognition.",
       "tts_enabled": "Enable TTS Playback",
       "tts_enabled_hint": "Use local sherpa-onnx TTS to synthesize and play the final assistant reply.",
       "tts_model": "TTS Model",
+      "tts_required": "Download the selected TTS model before enabling local speech playback.",
       "tts_speaker_id": "Speaker ID",
       "tts_speed": "Speech Speed"
     }

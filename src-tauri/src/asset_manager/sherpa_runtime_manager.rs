@@ -10,10 +10,55 @@ const SHERPA_RUNTIME_ARCHIVE_NAME: &str = "sherpa-onnx-v1.12.9-win-x64-shared";
 const SHERPA_RUNTIME_URL: &str =
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.9/sherpa-onnx-v1.12.9-win-x64-shared.tar.bz2";
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AvailableSherpaRuntime {
+    pub id: String,
+    pub url: String,
+    pub is_downloaded: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SherpaRuntimePaths {
     pub c_api_dll: PathBuf,
     pub onnxruntime_dll: PathBuf,
+}
+
+pub fn get_available_runtime(app_handle: &AppHandle) -> Result<Vec<AvailableSherpaRuntime>, String> {
+    let runtime_root = resolve_runtime_root(app_handle)?;
+    let target_path = runtime_root.join(SHERPA_RUNTIME_ARCHIVE_NAME);
+
+    Ok(vec![AvailableSherpaRuntime {
+        id: SHERPA_RUNTIME_ARCHIVE_NAME.to_string(),
+        url: SHERPA_RUNTIME_URL.to_string(),
+        is_downloaded: target_path.is_dir(),
+    }])
+}
+
+pub async fn download_runtime(
+    app_handle: &AppHandle,
+    runtime_id: String,
+    url: String,
+) -> Result<bool, String> {
+    if runtime_id != SHERPA_RUNTIME_ARCHIVE_NAME {
+        return Err(format!("Unknown sherpa runtime '{}'.", runtime_id));
+    }
+
+    if !url.trim().is_empty() && !asset_downloader::is_recognized_download_url(&url, SHERPA_RUNTIME_URL)
+    {
+        return Err("Download URL does not match the official sherpa runtime package.".to_string());
+    }
+
+    let runtime_root = resolve_runtime_root(app_handle)?;
+    let target_path = runtime_root.join(SHERPA_RUNTIME_ARCHIVE_NAME);
+    asset_downloader::download_asset(
+        app_handle,
+        SHERPA_RUNTIME_ARCHIVE_NAME,
+        SHERPA_RUNTIME_URL,
+        &target_path,
+        AssetType::TarBz2Archive,
+        SHERPA_RUNTIME_DOWNLOAD_EVENT,
+    )
+    .await
 }
 
 pub fn resolve_runtime_paths(app_handle: &AppHandle) -> Result<SherpaRuntimePaths, String> {
@@ -34,26 +79,6 @@ pub fn resolve_runtime_paths(app_handle: &AppHandle) -> Result<SherpaRuntimePath
         c_api_dll,
         onnxruntime_dll,
     })
-}
-
-pub async fn ensure_runtime_ready(app_handle: &AppHandle) -> Result<SherpaRuntimePaths, String> {
-    if let Ok(paths) = resolve_runtime_paths(app_handle) {
-        return Ok(paths);
-    }
-
-    let runtime_root = resolve_runtime_root(app_handle)?;
-    let target_path = runtime_root.join(SHERPA_RUNTIME_ARCHIVE_NAME);
-    asset_downloader::download_asset(
-        app_handle,
-        SHERPA_RUNTIME_ARCHIVE_NAME,
-        SHERPA_RUNTIME_URL,
-        &target_path,
-        AssetType::TarBz2Archive,
-        SHERPA_RUNTIME_DOWNLOAD_EVENT,
-    )
-    .await?;
-
-    resolve_runtime_paths(app_handle)
 }
 
 fn resolve_runtime_root(app_handle: &AppHandle) -> Result<PathBuf, String> {

@@ -310,8 +310,7 @@ unsafe impl Send for SherpaSpeechRuntime {}
 
 impl SherpaSpeechRuntime {
     pub fn new(app_handle: &tauri::AppHandle) -> Result<Self, String> {
-        let runtime_paths =
-            tauri::async_runtime::block_on(sherpa_runtime_manager::ensure_runtime_ready(app_handle))?;
+        let runtime_paths = sherpa_runtime_manager::resolve_runtime_paths(app_handle)?;
         let api = SherpaOnnxApi::load(&runtime_paths.c_api_dll, &runtime_paths.onnxruntime_dll)?;
 
         Ok(Self {

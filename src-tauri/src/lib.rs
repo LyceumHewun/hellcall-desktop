@@ -6,7 +6,7 @@ mod utils;
 
 use ai::types::{AiSessionEvent, AiSessionRecord, AiSessionSummary};
 use asset_manager::{
-    sherpa_model_manager, vision_model_manager, vosk_model_manager,
+    sherpa_model_manager, sherpa_runtime_manager, vision_model_manager, vosk_model_manager,
 };
 use hellcall::config::{AiConfig, AiLlmProviderConfig, MicrophoneConfig, SpeakerConfig};
 use hellcall::core::keypress::{Input, KeyPresser, LocalKey};
@@ -1058,6 +1058,13 @@ fn get_available_sherpa_stt_models(
 }
 
 #[tauri::command]
+fn get_available_sherpa_runtime(
+    app_handle: AppHandle,
+) -> Result<Vec<sherpa_runtime_manager::AvailableSherpaRuntime>, String> {
+    sherpa_runtime_manager::get_available_runtime(&app_handle)
+}
+
+#[tauri::command]
 fn get_available_sherpa_tts_models(
     app_handle: AppHandle,
 ) -> Result<Vec<sherpa_model_manager::AvailableSherpaModel>, String> {
@@ -1087,6 +1094,15 @@ async fn download_sherpa_stt_model(
     url: String,
 ) -> Result<bool, String> {
     sherpa_model_manager::download_stt_model(&app_handle, model_id, url).await
+}
+
+#[tauri::command]
+async fn download_sherpa_runtime(
+    app_handle: AppHandle,
+    model_id: String,
+    url: String,
+) -> Result<bool, String> {
+    sherpa_runtime_manager::download_runtime(&app_handle, model_id, url).await
 }
 
 #[tauri::command]
@@ -1486,10 +1502,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
+            get_available_sherpa_runtime,
             get_available_sherpa_stt_models,
             get_available_sherpa_tts_models,
             get_available_vision_models,
             download_vosk_model,
+            download_sherpa_runtime,
             download_sherpa_stt_model,
             download_sherpa_tts_model,
             download_vision_model,
