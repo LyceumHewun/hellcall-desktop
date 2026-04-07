@@ -18,12 +18,136 @@ struct AvailableVoskModelDefinition {
 
 const AVAILABLE_VOSK_MODELS: &[AvailableVoskModelDefinition] = &[
     AvailableVoskModelDefinition {
+        id: "vosk-model-small-ar-tn-0.1-linto",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/ar-tn/vosk-model-small-ar-tn-0.1-linto.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-ca-0.4",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/ca/vosk-model-small-ca-0.4.7z",
+    },
+    AvailableVoskModelDefinition {
         id: "vosk-model-small-cn-0.22",
         url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/cn/vosk-model-small-cn-0.22.7z",
     },
     AvailableVoskModelDefinition {
+        id: "vosk-model-small-cs-0.4-rhasspy",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/cs/vosk-model-small-cs-0.4-rhasspy.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-de-0.15",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/de/vosk-model-small-de-0.15.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-de-zamia-0.3",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/de/vosk-model-small-de-zamia-0.3.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-en-in-0.4",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/en-in/vosk-model-small-en-in-0.4.7z",
+    },
+    AvailableVoskModelDefinition {
         id: "vosk-model-small-en-us-0.15",
         url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/en-us/vosk-model-small-en-us-0.15.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-en-us-zamia-0.5",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/en-us_other/vosk-model-small-en-us-zamia-0.5.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-eo-0.42",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/eo/vosk-model-small-eo-0.42.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-es-0.42",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/es/vosk-model-small-es-0.42.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-fa-0.42",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/fa/vosk-model-small-fa-0.42.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-fa-0.5",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/fa_other/vosk-model-small-fa-0.5.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-fr-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/fr/vosk-model-small-fr-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-fr-pguyot-0.3",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/fr_other/vosk-model-small-fr-pguyot-0.3.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-gu-0.42",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/gu/vosk-model-small-gu-0.42.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-hi-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/hi/vosk-model-small-hi-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-it-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/it/vosk-model-small-it-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-ja-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/ja/vosk-model-small-ja-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-ko-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/ko/vosk-model-small-ko-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-kz-0.15",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/kz/vosk-model-small-kz-0.15.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-nl-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/nl/vosk-model-small-nl-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-pl-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/pl/vosk-model-small-pl-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-pt-0.3",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/pt/vosk-model-small-pt-0.3.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-ru-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/ru/vosk-model-small-ru-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-sv-rhasspy-0.15",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/sv/vosk-model-small-sv-rhasspy-0.15.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-te-0.42",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/te/vosk-model-small-te-0.42.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-tg-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/tg/vosk-model-small-tg-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-tr-0.3",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/tr/vosk-model-small-tr-0.3.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-uk-v3-nano",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/uk/vosk-model-small-uk-v3-nano.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-uk-v3-small",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/uk/vosk-model-small-uk-v3-small.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-uz-0.22",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/uz/vosk-model-small-uz-0.22.7z",
+    },
+    AvailableVoskModelDefinition {
+        id: "vosk-model-small-vn-0.4",
+        url: "https://huggingface.co/Derur/vosk-models/resolve/main/stt/vn/vosk-model-small-vn-0.4.7z",
     },
 ];
 
