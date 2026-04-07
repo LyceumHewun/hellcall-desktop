@@ -121,6 +121,8 @@ function eventTitle(kind: string, t: (key: string) => string) {
       return t("ai.events.user");
     case "assistant_final":
       return t("ai.events.assistant");
+    case "assistant_partial":
+      return t("ai.events.assistant_partial");
     case "assistant_tool_calls":
       return t("ai.events.tool_call");
     case "tool_result":
@@ -135,6 +137,8 @@ function eventClasses(kind: string) {
     case "user_transcript":
       return "border-sky-400/25 bg-sky-400/8";
     case "assistant_final":
+      return "border-white/10 bg-black/20";
+    case "assistant_partial":
       return "border-white/10 bg-black/20";
     case "assistant_tool_calls":
       return "border-[#FCE100]/30 bg-[#FCE100]/10";
@@ -183,21 +187,18 @@ export function AIView() {
   const [sttReady, setSttReady] = useState<boolean | null>(null);
   const [ttsReady, setTtsReady] = useState<boolean | null>(null);
   const {
-    currentSessionId,
     currentSession,
     liveToolActivities,
     isRecording,
     isStreaming,
+    isSpeaking,
+    phase,
     streamingText,
     isLoadingSession,
     error,
     setError,
     clearError,
-    setRecording,
-    setStreaming,
-    appendStreamingText,
     resetStreamingText,
-    pushLiveToolActivity,
     resetLiveToolActivities,
     setLastTranscript,
     fetchSession,
@@ -332,170 +333,8 @@ export function AIView() {
     };
   }, [config]);
 
-  useEffect(() => {
-    let mounted = true;
-    let unlistenRecording: UnlistenFn | null = null;
-    let unlistenTranscript: UnlistenFn | null = null;
-    let unlistenError: UnlistenFn | null = null;
-    let unlistenChatState: UnlistenFn | null = null;
-    let unlistenChatDelta: UnlistenFn | null = null;
-    let unlistenChatFinished: UnlistenFn | null = null;
-    let unlistenToolEvent: UnlistenFn | null = null;
-
-    const recordingPromise = listen<{ recording: boolean }>(
-      "ai-recording-state",
-      (event) => {
-        if (!mounted) {
-          return;
-        }
-        setRecording(event.payload.recording);
-      },
-    ).then((fn) => {
-      unlistenRecording = fn;
-      return fn;
-    });
-
-    const transcriptPromise = listen<{
-      session_id: string;
-      transcript: string;
-    }>("ai-transcription-ready", async (event) => {
-      if (!mounted) {
-        return;
-      }
-
-      setLastTranscript(event.payload.transcript);
-      clearError();
-      await fetchSession();
-      resetStreamingText();
-      resetLiveToolActivities();
-    }).then((fn) => {
-      unlistenTranscript = fn;
-      return fn;
-    });
-
-    const errorPromise = listen<{ message: string }>("ai-recording-error", (event) => {
-      if (!mounted) {
-        return;
-      }
-      console.error("AI recording error:", event.payload.message);
-      setRecording(false);
-      setError(event.payload.message);
-      toast.error(event.payload.message);
-    }).then((fn) => {
-      unlistenError = fn;
-      return fn;
-    });
-
-    const chatStatePromise = listen<{ streaming: boolean }>("ai-chat-state", (event) => {
-      if (!mounted) {
-        return;
-      }
-      setStreaming(event.payload.streaming);
-      if (!event.payload.streaming) {
-        fetchSession().catch(console.error);
-      }
-    }).then((fn) => {
-      unlistenChatState = fn;
-      return fn;
-    });
-
-    const chatDeltaPromise = listen<{ session_id: string; delta: string }>(
-      "ai-chat-delta",
-      (event) => {
-        if (!mounted || event.payload.session_id !== currentSessionId) {
-          return;
-        }
-        appendStreamingText(event.payload.delta);
-      },
-    ).then((fn) => {
-      unlistenChatDelta = fn;
-      return fn;
-    });
-
-    const chatFinishedPromise = listen<{ session_id: string; message: string }>(
-      "ai-chat-finished",
-      async () => {
-        if (!mounted) {
-          return;
-        }
-        await fetchSession();
-      },
-    ).then((fn) => {
-      unlistenChatFinished = fn;
-      return fn;
-    });
-
-    const toolEventPromise = listen<{
-      id: string;
-      session_id: string;
-      phase: "call" | "result" | "error";
-      name: string;
-      summary: string;
-    }>("ai-tool-event", (event) => {
-      if (!mounted || event.payload.session_id !== currentSessionId) {
-        return;
-      }
-      pushLiveToolActivity(event.payload);
-    }).then((fn) => {
-      unlistenToolEvent = fn;
-      return fn;
-    });
-
-    return () => {
-      mounted = false;
-      if (unlistenRecording) {
-        unlistenRecording();
-      } else {
-        recordingPromise.then((fn) => fn());
-      }
-      if (unlistenTranscript) {
-        unlistenTranscript();
-      } else {
-        transcriptPromise.then((fn) => fn());
-      }
-      if (unlistenError) {
-        unlistenError();
-      } else {
-        errorPromise.then((fn) => fn());
-      }
-      if (unlistenChatState) {
-        unlistenChatState();
-      } else {
-        chatStatePromise.then((fn) => fn());
-      }
-      if (unlistenChatDelta) {
-        unlistenChatDelta();
-      } else {
-        chatDeltaPromise.then((fn) => fn());
-      }
-      if (unlistenChatFinished) {
-        unlistenChatFinished();
-      } else {
-        chatFinishedPromise.then((fn) => fn());
-      }
-      if (unlistenToolEvent) {
-        unlistenToolEvent();
-      } else {
-        toolEventPromise.then((fn) => fn());
-      }
-    };
-  }, [
-    appendStreamingText,
-    clearError,
-    currentSessionId,
-    fetchSession,
-    pushLiveToolActivity,
-    resetStreamingText,
-    resetLiveToolActivities,
-    setError,
-    setLastTranscript,
-    setRecording,
-    setStreaming,
-    t,
-  ]);
-
   const startManualRecording = async () => {
-    if (isManualHoldRef.current || isRecording) {
+    if (isManualHoldRef.current || isRecording || isStreaming || isSpeaking) {
       return;
     }
 
@@ -534,7 +373,19 @@ export function AIView() {
           ? recordingError.message
           : String(recordingError ?? t("ai.errors.stop_recording"));
       console.error("Failed to stop AI recording:", recordingError);
-      setRecording(false);
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  const stopStreaming = async () => {
+    try {
+      await invoke("stop_ai_chat_stream");
+    } catch (streamError) {
+      const message =
+        streamError instanceof Error
+          ? streamError.message
+          : String(streamError ?? t("ai.errors.start_chat"));
       setError(message);
       toast.error(message);
     }
@@ -574,14 +425,45 @@ export function AIView() {
   const showTtsDownloadHint =
     Boolean(config?.ai.speech.tts.enabled) && ttsReady === false;
   const isAiReady = aiStatus === "READY";
+  const isBusy = isStreaming || isSpeaking;
   const pttButtonLabel = isRecording
     ? t("ai.ptt_button_recording")
+    : isSpeaking
+      ? t("ai.ptt_button_speaking")
+      : isStreaming
+        ? phase === "tool_running"
+          ? t("ai.ptt_button_tool_running")
+          : t("ai.ptt_button_thinking")
     : aiStatus === "WARMING_UP"
       ? t("ai.ptt_button_warming_up")
       : aiStatus === "READY"
         ? t("ai.ptt_button")
         : t("ai.ptt_button_disabled");
-  const pttDisabled = requiresSpeechDownload || !isAiReady;
+  const pttDisabled = requiresSpeechDownload || !isAiReady || isBusy;
+  const assistantPendingLabel =
+    phase === "tool_running"
+      ? t("ai.streaming_status_tool")
+      : isSpeaking
+        ? t("ai.streaming_status_speaking")
+        : t("ai.streaming_status");
+  const phaseBannerLabel = (() => {
+    switch (phase) {
+      case "listening":
+        return t("status.ai_listening");
+      case "transcribing":
+        return t("status.ai_transcribing");
+      case "thinking":
+        return t("status.ai_thinking");
+      case "tool_running":
+        return t("status.ai_tool_running");
+      case "speaking":
+        return t("status.ai_speaking");
+      case "error":
+        return t("status.ai_error");
+      default:
+        return null;
+    }
+  })();
 
   useLayoutEffect(() => {
     const container = conversationContainerRef.current;
@@ -764,6 +646,12 @@ export function AIView() {
                       {error}
                     </div>
                   ) : null}
+                  {phaseBannerLabel ? (
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white/55">
+                      <span className="inline-block h-2 w-2 rounded-full bg-[#FCE100]" />
+                      <span>{phaseBannerLabel}</span>
+                    </div>
+                  ) : null}
                   {currentSession ? (
                     <>
                       {isLoadingSession ? (
@@ -849,7 +737,7 @@ export function AIView() {
                           })}
 
                           {liveToolActivities.length > 0 ? (
-                            <div className="space-y-3">
+                            <div className="space-y-2">
                               <div className="px-1 text-[10px] uppercase tracking-[0.22em] text-white/35">
                                 {t("ai.live_tools")}
                               </div>
@@ -876,15 +764,32 @@ export function AIView() {
                             </div>
                           ) : null}
 
-                          {isStreaming && streamingText ? (
+                          {isStreaming || isSpeaking ? (
                             <div className="rounded-xl border border-[#FCE100]/30 bg-[#FCE100]/10 p-4">
                               <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/45">
                                 <span>{t("ai.streaming_label")}</span>
-                                <span>{t("ai.streaming_status")}</span>
+                                <div className="flex items-center gap-3">
+                                  <span>{assistantPendingLabel}</span>
+                                  {isStreaming ? (
+                                    <Button
+                                      variant="outline"
+                                      className="h-7 border-white/15 bg-black/20 px-2 text-[10px] uppercase tracking-[0.14em] text-white/80 hover:bg-white/10"
+                                      onClick={() => void stopStreaming()}
+                                    >
+                                      {t("ai.ptt_button_stop")}
+                                    </Button>
+                                  ) : null}
+                                </div>
                               </div>
-                              <p className="whitespace-pre-wrap break-words text-sm text-white/85">
-                                {streamingText}
-                              </p>
+                              {streamingText ? (
+                                <p className="whitespace-pre-wrap break-words text-sm text-white/85">
+                                  {streamingText}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-white/55">
+                                  {t("ai.streaming_placeholder")}
+                                </p>
+                              )}
                             </div>
                           ) : null}
                         </div>
@@ -902,16 +807,20 @@ export function AIView() {
                 className={`w-full text-black ${
                   isRecording
                     ? "bg-[#FCE100] hover:bg-[#FCE100]/90"
-                    : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
+                  : "bg-[#FCE100]/85 hover:bg-[#FCE100]"
                 }`}
                 disabled={pttDisabled}
-                onMouseDown={() => void startManualRecording()}
+                onMouseDown={() =>
+                  isStreaming ? void stopStreaming() : void startManualRecording()
+                }
                 onMouseUp={() => void stopManualRecording()}
                 onMouseLeave={() => void stopManualRecording()}
-                onTouchStart={() => void startManualRecording()}
+                onTouchStart={() =>
+                  isStreaming ? void stopStreaming() : void startManualRecording()
+                }
                 onTouchEnd={() => void stopManualRecording()}
               >
-                {pttButtonLabel}
+                {isStreaming ? t("ai.ptt_button_stop") : pttButtonLabel}
               </Button>
             </div>
           </div>

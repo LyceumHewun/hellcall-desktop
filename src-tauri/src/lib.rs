@@ -131,6 +131,11 @@ struct AiChatFinishedPayload {
 }
 
 #[derive(Clone, serde::Serialize)]
+struct AiTtsStatePayload {
+    speaking: bool,
+}
+
+#[derive(Clone, serde::Serialize)]
 struct AiToolEventPayload {
     id: String,
     session_id: String,
@@ -152,6 +157,8 @@ struct AppState {
     ai_enabled: Mutex<bool>,
     ai_warmup_in_progress: Mutex<bool>,
     ai_streaming: Mutex<bool>,
+    ai_chat_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    ai_partial_response: Mutex<Option<(String, String)>>,
 }
 
 fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -590,11 +597,16 @@ fn emit_ai_chat_finished(app_handle: &AppHandle, session_id: &str, message: &str
     );
 }
 
+fn emit_ai_tts_state(app_handle: &AppHandle, speaking: bool) {
+    let _ = app_handle.emit("ai-tts-state", AiTtsStatePayload { speaking });
+}
+
 fn launch_ai_chat_stream(
     app_handle: AppHandle,
     session_id: String,
     runtime: AiRuntimeContext,
 ) -> Result<(), String> {
+    clear_ai_partial_response(&app_handle.state::<AppState>())?;
     {
         let state = app_handle.state::<AppState>();
         let mut streaming = state.ai_streaming.lock().map_err(|e| e.to_string())?;
@@ -607,7 +619,7 @@ fn launch_ai_chat_stream(
     emit_ai_chat_state(&app_handle, true);
     let app_handle_clone = app_handle.clone();
 
-    tauri::async_runtime::spawn(async move {
+    let handle = tauri::async_runtime::spawn(async move {
         let result =
             run_ai_chat_pipeline(app_handle_clone.clone(), session_id.clone(), runtime).await;
 
@@ -620,8 +632,15 @@ fn launch_ai_chat_stream(
         if let Ok(mut streaming) = app_handle_clone.state::<AppState>().ai_streaming.lock() {
             *streaming = false;
         }
+        if let Ok(mut task_guard) = app_handle_clone.state::<AppState>().ai_chat_task.lock() {
+            *task_guard = None;
+        }
         emit_ai_chat_state(&app_handle_clone, false);
     });
+
+    let state = app_handle.state::<AppState>();
+    let mut task_guard = state.ai_chat_task.lock().map_err(|e| e.to_string())?;
+    *task_guard = Some(handle);
 
     Ok(())
 }
@@ -652,6 +671,56 @@ fn emit_ai_tool_event(
             summary: summary.to_string(),
         },
     );
+}
+
+fn clear_ai_partial_response(state: &State<'_, AppState>) -> Result<(), String> {
+    let mut guard = state.ai_partial_response.lock().map_err(|e| e.to_string())?;
+    *guard = None;
+    Ok(())
+}
+
+fn set_ai_partial_response(
+    state: &State<'_, AppState>,
+    session_id: &str,
+    text: String,
+) -> Result<(), String> {
+    let mut guard = state.ai_partial_response.lock().map_err(|e| e.to_string())?;
+    *guard = Some((session_id.to_string(), text));
+    Ok(())
+}
+
+fn persist_interrupted_ai_response(
+    state: &State<'_, AppState>,
+    session_id: &str,
+) -> Result<(), String> {
+    let partial = {
+        let mut guard = state.ai_partial_response.lock().map_err(|e| e.to_string())?;
+        let Some((stored_session_id, text)) = guard.take() else {
+            return Ok(());
+        };
+        if stored_session_id != session_id {
+            *guard = Some((stored_session_id, text));
+            return Ok(());
+        }
+        text
+    };
+
+    let trimmed = partial.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    append_ai_session_event(
+        state,
+        AiSessionEvent {
+            id: format!("event-{}", now_ms()),
+            kind: "assistant_partial".to_string(),
+            text: Some(trimmed.to_string()),
+            created_at_ms: now_ms(),
+        },
+    )?;
+
+    Ok(())
 }
 
 fn parse_local_key(name: &str) -> Option<LocalKey> {
@@ -1034,6 +1103,7 @@ async fn run_ai_chat_pipeline(
         let mut streamed_text = String::new();
         let stream_result = ai::client::stream_chat_completion(&provider, body, |delta| {
             streamed_text.push_str(delta);
+            let _ = set_ai_partial_response(&state, &session_id, streamed_text.clone());
             emit_ai_chat_delta(&app_handle, &session_id, delta);
             Ok(())
         })
@@ -1086,6 +1156,7 @@ async fn run_ai_chat_pipeline(
                     created_at_ms: now_ms(),
                 },
             )?;
+            clear_ai_partial_response(&state)?;
 
             if let Err(error) = synthesize_ai_tts_and_play(&app_handle, &runtime, &final_text).await
             {
@@ -1126,10 +1197,12 @@ async fn synthesize_ai_tts_and_play(
         return Err("AI speaker is unavailable.".to_string());
     };
 
+    emit_ai_tts_state(app_handle, true);
     bridge
         .speaker
         .play_pcm_f32(1, generated_audio.sample_rate as u32, generated_audio.samples)
         .map_err(|e| utils::format_and_log_error("Failed to play AI TTS audio", e))?;
+    emit_ai_tts_state(app_handle, false);
 
     Ok(())
 }
@@ -1616,6 +1689,34 @@ fn start_ai_chat_stream(
     launch_ai_chat_stream(app_handle, session_id, runtime)
 }
 
+#[tauri::command]
+fn stop_ai_chat_stream(app_handle: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let session_id = state
+        .ai_runtime_context
+        .lock()
+        .map_err(|e| e.to_string())?
+        .session_id
+        .clone()
+        .unwrap_or_else(|| DEFAULT_AI_SESSION_ID.to_string());
+
+    {
+        let mut task_guard = state.ai_chat_task.lock().map_err(|e| e.to_string())?;
+        if let Some(handle) = task_guard.take() {
+            handle.abort();
+        }
+    }
+
+    {
+        let mut streaming = state.ai_streaming.lock().map_err(|e| e.to_string())?;
+        *streaming = false;
+    }
+
+    persist_interrupted_ai_response(&state, &session_id)?;
+    emit_ai_chat_state(&app_handle, false);
+    emit_ai_tts_state(&app_handle, false);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1652,6 +1753,8 @@ pub fn run() {
             ai_enabled: Mutex::new(false),
             ai_warmup_in_progress: Mutex::new(false),
             ai_streaming: Mutex::new(false),
+            ai_chat_task: Mutex::new(None),
+            ai_partial_response: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
@@ -1683,6 +1786,7 @@ pub fn run() {
             start_ai_recording,
             stop_ai_recording,
             start_ai_chat_stream,
+            stop_ai_chat_stream,
             start_engine,
             stop_engine
         ])

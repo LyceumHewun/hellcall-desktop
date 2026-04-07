@@ -3,6 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { AiLiveToolActivity, AiSessionRecord } from "../types/ai";
 
 const DEFAULT_AI_SESSION_ID = "default-session";
+export type AiUiPhase =
+  | "idle"
+  | "listening"
+  | "transcribing"
+  | "thinking"
+  | "tool_running"
+  | "speaking"
+  | "error";
 
 interface AiState {
   currentSessionId: string;
@@ -10,6 +18,8 @@ interface AiState {
   liveToolActivities: AiLiveToolActivity[];
   isRecording: boolean;
   isStreaming: boolean;
+  isSpeaking: boolean;
+  phase: AiUiPhase;
   streamingText: string;
   lastTranscript: string | null;
   isLoadingSession: boolean;
@@ -18,6 +28,8 @@ interface AiState {
   clearError: () => void;
   setRecording: (recording: boolean) => void;
   setStreaming: (streaming: boolean) => void;
+  setSpeaking: (speaking: boolean) => void;
+  setPhase: (phase: AiUiPhase) => void;
   appendStreamingText: (delta: string) => void;
   resetStreamingText: () => void;
   pushLiveToolActivity: (activity: AiLiveToolActivity) => void;
@@ -33,6 +45,8 @@ export const useAiStore = create<AiState>((set) => ({
   liveToolActivities: [],
   isRecording: false,
   isStreaming: false,
+  isSpeaking: false,
+  phase: "idle",
   streamingText: "",
   lastTranscript: null,
   isLoadingSession: false,
@@ -41,6 +55,8 @@ export const useAiStore = create<AiState>((set) => ({
   clearError: () => set({ error: null }),
   setRecording: (recording) => set({ isRecording: recording }),
   setStreaming: (streaming) => set({ isStreaming: streaming }),
+  setSpeaking: (speaking) => set({ isSpeaking: speaking }),
+  setPhase: (phase) => set({ phase }),
   appendStreamingText: (delta) =>
     set((state) => ({ streamingText: `${state.streamingText}${delta}` })),
   resetStreamingText: () => set({ streamingText: "" }),
@@ -60,8 +76,6 @@ export const useAiStore = create<AiState>((set) => ({
       set({
         currentSession: session,
         isLoadingSession: false,
-        streamingText: "",
-        liveToolActivities: [],
       });
     } catch (error) {
       set({

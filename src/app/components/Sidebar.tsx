@@ -10,6 +10,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useConfigStore } from "../../store/configStore";
+import { useAiStore } from "../../store/aiStore";
 import { useEngineStore } from "../../store/engineStore";
 import {
   buildEngineStartSnapshot,
@@ -26,6 +27,7 @@ interface SidebarProps {
 export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
   const { t } = useTranslation();
   const config = useConfigStore((state) => state.config);
+  const aiPhase = useAiStore((state) => state.phase);
   const {
     status,
     setStatus,
@@ -378,6 +380,24 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
         return t("status.ai_warming_up");
     }
   })();
+  const aiPhaseLabel = (() => {
+    switch (aiPhase) {
+      case "listening":
+        return t("status.ai_listening");
+      case "transcribing":
+        return t("status.ai_transcribing");
+      case "thinking":
+        return t("status.ai_thinking");
+      case "tool_running":
+        return t("status.ai_tool_running");
+      case "speaking":
+        return t("status.ai_speaking");
+      case "error":
+        return t("status.ai_error");
+      default:
+        return null;
+    }
+  })();
   const validMacrosCount =
     config?.commands.filter(
       (commandConfig) =>
@@ -456,6 +476,8 @@ export function Sidebar({ activeNav, setActiveNav }: SidebarProps) {
             >
               {isAiWarmingUp
                 ? aiWarmupLabel
+                : aiPhaseLabel
+                  ? aiPhaseLabel
                 : isAiReady
                   ? t("status.ai_ready")
                   : t("status.ai_offline")}
