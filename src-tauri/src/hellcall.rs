@@ -21,7 +21,7 @@ use self::core::matcher::*;
 use self::core::microphone::*;
 use self::core::speaker::*;
 use self::core::vision::YoloEngine;
-use crate::utils::*;
+use crate::utils::StringUtils;
 
 static AUDIO_DIR: &str = "audio";
 
@@ -179,7 +179,28 @@ impl HellcallEngine {
             .collect::<Result<HashMap<_, _>>>()?;
 
         let command = Arc::new(Command::new(command_map));
-        let command_dic = command.keys().map(|x| x.to_string()).collect::<Vec<_>>();
+        let mut normalized_command_lookup = HashMap::new();
+        let command_dic = command
+            .keys()
+            .filter_map(|command| {
+                let normalized = command.normalize_text_for_matching();
+                if normalized.is_empty() {
+                    return None;
+                }
+
+                if let Some(existing) = normalized_command_lookup.get(&normalized) {
+                    warn!(
+                        "normalized command collision: '{}' and '{}' both map to '{}'",
+                        existing, command, normalized
+                    );
+                } else {
+                    normalized_command_lookup.insert(normalized.clone(), command.to_string());
+                }
+
+                Some(normalized)
+            })
+            .collect::<Vec<_>>();
+        let normalized_command_lookup = Arc::new(normalized_command_lookup);
         let matcher = Arc::new(Mutex::new(LevenshteinMatcher::new(command_dic)));
         let trigger = config.trigger.clone();
 
@@ -187,21 +208,21 @@ impl HellcallEngine {
         let mut grammar: Vec<String> = config
             .commands
             .iter()
-            .map(|cmd| {
-                let grammar = cmd.grammar.clone();
-                if let Some(grammar) = grammar {
-                    if !grammar.is_empty() {
-                        return grammar;
-                    }
-                }
-                cmd.command.clone().add_between_chars(" ")
+            .filter_map(|cmd| {
+                cmd.grammar
+                    .as_deref()
+                    .map(StringUtils::collapse_whitespace)
+                    .filter(|grammar| !grammar.is_empty())
+                    .or_else(|| cmd.command.build_default_vosk_grammar())
             })
             .collect();
 
         if let Some(hit_word_grammar) = trigger.hit_word_grammar.clone().filter(|g| !g.is_empty()) {
-            grammar.push(hit_word_grammar);
-        } else if !&trigger.hit_word.is_empty() {
-            grammar.push(trigger.hit_word.clone().unwrap().add_between_chars(" "));
+            grammar.push(hit_word_grammar.collapse_whitespace());
+        } else if let Some(hit_word) = trigger.hit_word.as_deref() {
+            if let Some(default_hit_word_grammar) = hit_word.build_default_vosk_grammar() {
+                grammar.push(default_hit_word_grammar);
+            }
         }
 
         audio_recognizer_config.set_grammar(grammar);
@@ -302,9 +323,15 @@ impl HellcallEngine {
         };
 
         let command_ref = Arc::clone(&command);
+        let normalized_command_lookup_ref = Arc::clone(&normalized_command_lookup);
         let matcher_ref = Arc::clone(&matcher);
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let cancel_flag_clone = Arc::clone(&cancel_flag);
+        let normalized_hit_word = trigger
+            .hit_word
+            .as_deref()
+            .map(StringUtils::normalize_text_for_matching)
+            .filter(|hit_word| !hit_word.is_empty());
 
         let on_result = Box::new(move |result: RecognitionResult| {
             if cancel_flag_clone.load(Ordering::Relaxed) {
@@ -316,13 +343,12 @@ impl HellcallEngine {
                 return;
             }
 
-            let speech = speech.replace(" ", "");
-            let hit_word = trigger.hit_word.clone();
-            let command_to_match = if hit_word.is_empty() {
+            let speech = speech.normalize_text_for_matching();
+            let command_to_match = if normalized_hit_word.is_none() {
                 info!("speech: {}", speech);
                 speech
             } else {
-                let hit_word = hit_word.unwrap();
+                let hit_word = normalized_hit_word.as_ref().unwrap();
                 if let Some(pos) = speech.rfind(hit_word.as_str()) {
                     let command_str = &speech[pos + hit_word.len()..];
                     info!("speech: {} {}", hit_word, command_str);
@@ -338,8 +364,15 @@ impl HellcallEngine {
                 .unwrap()
                 .match_str(command_to_match.as_str())
             {
-                info!("hit command: {}", command);
-                command_ref.execute(command.as_str());
+                if let Some(original_command) = normalized_command_lookup_ref.get(&command) {
+                    info!("hit command: {}", original_command);
+                    command_ref.execute(original_command.as_str());
+                } else {
+                    warn!(
+                        "matched normalized command '{}' but no original command was found",
+                        command
+                    );
+                }
             } else {
                 warn!("no matching command found: {}", command_to_match);
             }
@@ -381,5 +414,50 @@ impl HellcallEngine {
         };
         // self 中剩余的 _processor、_speaker、cancel_flag 此处 drop（按声明顺序）
         handle
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::StringUtils;
+
+    #[test]
+    fn default_vosk_grammar_splits_cjk_chars() {
+        assert_eq!(
+            "快速开火".build_default_vosk_grammar(),
+            Some("快 速 开 火".to_string())
+        );
+    }
+
+    #[test]
+    fn default_vosk_grammar_preserves_latin_words() {
+        assert_eq!(
+            "open fire now".build_default_vosk_grammar(),
+            Some("open fire now".to_string())
+        );
+    }
+
+    #[test]
+    fn default_vosk_grammar_supports_mixed_scripts() {
+        assert_eq!(
+            "alpha 快速 fire".build_default_vosk_grammar(),
+            Some("alpha 快 速 fire".to_string())
+        );
+    }
+
+    #[test]
+    fn default_vosk_grammar_preserves_hangul_words() {
+        assert_eq!(
+            "빠른 발사".build_default_vosk_grammar(),
+            Some("빠른 발사".to_string())
+        );
+    }
+
+    #[test]
+    fn matching_normalization_removes_spaces_and_lowercases_latin_text() {
+        assert_eq!(
+            "Open   Fire".normalize_text_for_matching(),
+            "openfire".to_string()
+        );
     }
 }
