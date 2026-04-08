@@ -43,10 +43,30 @@ function normalizeForSignature(value: unknown): unknown {
   return value;
 }
 
+function extractVoiceEngineConfig(config: AppConfig) {
+  return {
+    vision: config.vision,
+    microphone: config.microphone,
+    speaker: config.speaker,
+    recognizer: config.recognizer,
+    key_presser: config.key_presser,
+    key_map: config.key_map,
+    trigger: config.trigger,
+    commands: config.commands,
+  };
+}
+
 export function createEngineStartSignature(
   snapshot: EngineStartSnapshot,
 ): string {
-  return JSON.stringify(normalizeForSignature(snapshot));
+  return JSON.stringify(
+    normalizeForSignature({
+      config: extractVoiceEngineConfig(snapshot.config),
+      selectedDevice: snapshot.selectedDevice,
+      selectedVoskModelId: snapshot.selectedVoskModelId,
+      selectedVisionModelId: snapshot.selectedVisionModelId,
+    }),
+  );
 }
 
 export function buildEngineStartSnapshot(

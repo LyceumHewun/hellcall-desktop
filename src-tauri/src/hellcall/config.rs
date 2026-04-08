@@ -46,6 +46,46 @@ fn default_microphone_enable_denoise() -> bool {
     false
 }
 
+fn default_ai_llm_provider_id() -> String {
+    "siliconflow".to_string()
+}
+
+fn default_ai_base_url() -> String {
+    "https://api.siliconflow.cn/v1".to_string()
+}
+
+fn default_ai_chat_model() -> String {
+    "deepseek-ai/DeepSeek-V3.2".to_string()
+}
+
+fn default_ai_stt_model_id() -> String {
+    "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17".to_string()
+}
+
+fn default_ai_tts_enabled() -> bool {
+    true
+}
+
+fn default_ai_tts_model_id() -> String {
+    "vits-melo-tts-zh_en".to_string()
+}
+
+fn default_ai_stt_language() -> String {
+    "auto".to_string()
+}
+
+fn default_ai_tts_speed() -> f32 {
+    1.0
+}
+
+fn default_ai_agent_id() -> String {
+    "tactical-assistant".to_string()
+}
+
+fn default_ai_auto_execute_skills() -> bool {
+    true
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VisionConfig {
     #[serde(default)]
@@ -68,6 +108,10 @@ impl Default for VisionConfig {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(default)]
 pub struct Config {
+    #[serde(default)]
+    pub mode: AppMode,
+    #[serde(default)]
+    pub ai: AiConfig,
     #[serde(default)]
     pub vision: VisionConfig,
     #[serde(default)]
@@ -92,6 +136,108 @@ pub struct Config {
     pub key_map: HashMap<LocalKey, Input>,
     pub trigger: TriggerConfig,
     pub commands: Vec<CommandConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum AppMode {
+    #[serde(rename = "voice_command")]
+    #[default]
+    VoiceCommand,
+    #[serde(rename = "ai_agent")]
+    AiAgent,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiConfig {
+    #[serde(default)]
+    pub llm: AiLlmConfig,
+    #[serde(default)]
+    pub speech: AiSpeechConfig,
+    #[serde(default = "default_ai_auto_execute_skills")]
+    pub auto_execute_skills: bool,
+    #[serde(default = "default_ai_agent_id")]
+    pub default_agent_id: String,
+    #[serde(default = "default_ai_agents")]
+    pub agents: Vec<AiAgentConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiLlmConfig {
+    #[serde(default = "default_ai_llm_provider_id")]
+    pub selected_provider_id: String,
+    #[serde(default = "default_ai_llm_providers")]
+    pub providers: Vec<AiLlmProviderConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+pub enum AiLlmProviderKind {
+    #[serde(rename = "siliconflow")]
+    SiliconFlow,
+    #[serde(rename = "openai_compatible")]
+    OpenAiCompatible,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiLlmProviderConfig {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub kind: AiLlmProviderKind,
+    pub base_url: String,
+    pub api_key: String,
+    pub chat_model: String,
+    pub is_builtin: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiSpeechConfig {
+    #[serde(default)]
+    pub stt: AiSpeechSttConfig,
+    #[serde(default)]
+    pub tts: AiSpeechTtsConfig,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiSpeechSttConfig {
+    #[serde(default = "default_ai_stt_model_id")]
+    pub model_id: String,
+    #[serde(default = "default_ai_stt_language")]
+    pub language: String,
+    #[serde(default)]
+    pub use_itn: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiSpeechTtsConfig {
+    #[serde(default = "default_ai_tts_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_ai_tts_model_id")]
+    pub model_id: String,
+    #[serde(default)]
+    pub speaker_id: i32,
+    #[serde(default = "default_ai_tts_speed")]
+    pub speed: f32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiAgentConfig {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub system_prompt: String,
+    pub chat_model: String,
+    pub temperature: f32,
+    pub max_tokens: u32,
+    pub enable_thinking: bool,
+    pub skill_ids: Vec<String>,
+    pub is_builtin: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -163,6 +309,8 @@ pub struct CommandConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            mode: AppMode::default(),
+            ai: AiConfig::default(),
             vision: VisionConfig::default(),
             microphone: MicrophoneConfig::default(),
             speaker: SpeakerConfig::default(),
@@ -178,6 +326,113 @@ impl Default for Config {
             ]),
             trigger: TriggerConfig::default(),
             commands: Vec::new(),
+        }
+    }
+}
+
+fn default_ai_agents() -> Vec<AiAgentConfig> {
+    vec![AiAgentConfig::default()]
+}
+
+fn default_ai_llm_providers() -> Vec<AiLlmProviderConfig> {
+    vec![AiLlmProviderConfig::builtin_siliconflow()]
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            llm: AiLlmConfig::default(),
+            speech: AiSpeechConfig::default(),
+            auto_execute_skills: default_ai_auto_execute_skills(),
+            default_agent_id: default_ai_agent_id(),
+            agents: default_ai_agents(),
+        }
+    }
+}
+
+impl Default for AiLlmConfig {
+    fn default() -> Self {
+        Self {
+            selected_provider_id: default_ai_llm_provider_id(),
+            providers: default_ai_llm_providers(),
+        }
+    }
+}
+
+impl Default for AiLlmProviderKind {
+    fn default() -> Self {
+        Self::SiliconFlow
+    }
+}
+
+impl AiLlmProviderConfig {
+    pub fn builtin_siliconflow() -> Self {
+        Self {
+            id: default_ai_llm_provider_id(),
+            name: "SiliconFlow".to_string(),
+            kind: AiLlmProviderKind::SiliconFlow,
+            base_url: default_ai_base_url(),
+            api_key: String::new(),
+            chat_model: default_ai_chat_model(),
+            is_builtin: true,
+        }
+    }
+}
+
+impl Default for AiLlmProviderConfig {
+    fn default() -> Self {
+        Self::builtin_siliconflow()
+    }
+}
+
+impl Default for AiSpeechConfig {
+    fn default() -> Self {
+        Self {
+            stt: AiSpeechSttConfig::default(),
+            tts: AiSpeechTtsConfig::default(),
+        }
+    }
+}
+
+impl Default for AiSpeechSttConfig {
+    fn default() -> Self {
+        Self {
+            model_id: default_ai_stt_model_id(),
+            language: default_ai_stt_language(),
+            use_itn: true,
+        }
+    }
+}
+
+impl Default for AiSpeechTtsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_ai_tts_enabled(),
+            model_id: default_ai_tts_model_id(),
+            speaker_id: 0,
+            speed: default_ai_tts_speed(),
+        }
+    }
+}
+
+impl Default for AiAgentConfig {
+    fn default() -> Self {
+        Self {
+            id: default_ai_agent_id(),
+            name: "战术副官".to_string(),
+            description: "简洁、执行优先的全局作战助手".to_string(),
+            system_prompt: "你是 Hellcall 的战术副官。优先用简洁中文回答；当用户明确要求执行战备、输入方向指令或触发本地动作时，优先调用可用工具完成任务；不要编造工具执行结果。".to_string(),
+            chat_model: String::new(),
+            temperature: 0.7,
+            max_tokens: 2048,
+            enable_thinking: false,
+            skill_ids: vec![
+                "send_key_sequence".to_string(),
+                "execute_stratagem".to_string(),
+                "list_stratagems".to_string(),
+                "get_key_mappings".to_string(),
+            ],
+            is_builtin: true,
         }
     }
 }
@@ -318,6 +573,7 @@ pub fn load_config_from_path(config_path: &Path) -> Result<Config, String> {
         Ok(old_value) => {
             merge_toml_values(&mut base_value, &old_value);
             migrate_legacy_microphone_config(&mut base_value, &old_value);
+            migrate_legacy_ai_config(&mut base_value, &old_value);
 
             let final_config = base_value.try_into().unwrap_or_else(|e| {
                 log::warn!(
@@ -373,4 +629,115 @@ fn migrate_legacy_microphone_config(base_value: &mut Value, old_value: &Value) {
     if should_migrate {
         microphone_table.insert("enable_denoise".to_string(), Value::Boolean(old_denoise));
     }
+}
+
+fn migrate_legacy_ai_config(base_value: &mut Value, old_value: &Value) {
+    let Some(old_ai) = old_value.get("ai").and_then(Value::as_table) else {
+        return;
+    };
+
+    let Some(base_table) = base_value.as_table_mut() else {
+        return;
+    };
+
+    let ai = base_table
+        .entry("ai")
+        .or_insert_with(|| Value::Table(toml::map::Map::new()));
+    let Some(ai_table) = ai.as_table_mut() else {
+        return;
+    };
+
+    let legacy_provider = old_ai
+        .get("provider")
+        .and_then(Value::as_str)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let legacy_base_url = old_ai
+        .get("base_url")
+        .and_then(Value::as_str)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let legacy_api_key = old_ai
+        .get("api_key")
+        .and_then(Value::as_str)
+        .map(|value| value.to_string());
+    let legacy_chat_model = old_ai
+        .get("default_chat_model")
+        .and_then(Value::as_str)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let legacy_tts_enabled = old_ai.get("tts_enabled").and_then(Value::as_bool);
+
+    let has_legacy_llm_fields = legacy_provider.is_some()
+        || legacy_base_url.is_some()
+        || legacy_api_key.is_some()
+        || legacy_chat_model.is_some();
+
+    if has_legacy_llm_fields {
+        let provider_id = legacy_provider
+            .map(sanitize_ai_provider_id)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(default_ai_llm_provider_id);
+        let provider_kind = match legacy_provider {
+            Some("siliconflow") | None => AiLlmProviderKind::SiliconFlow,
+            _ => AiLlmProviderKind::OpenAiCompatible,
+        };
+        let provider_name = match provider_kind {
+            AiLlmProviderKind::SiliconFlow => "SiliconFlow".to_string(),
+            AiLlmProviderKind::OpenAiCompatible => "Custom Provider".to_string(),
+        };
+
+        let provider = AiLlmProviderConfig {
+            id: provider_id.clone(),
+            name: provider_name,
+            kind: provider_kind,
+            base_url: legacy_base_url
+                .map(ToString::to_string)
+                .unwrap_or_else(default_ai_base_url),
+            api_key: legacy_api_key.unwrap_or_default(),
+            chat_model: legacy_chat_model
+                .map(ToString::to_string)
+                .unwrap_or_else(default_ai_chat_model),
+            is_builtin: provider_id == default_ai_llm_provider_id(),
+        };
+
+        ai_table.insert(
+            "llm".to_string(),
+            Value::try_from(AiLlmConfig {
+                selected_provider_id: provider_id,
+                providers: vec![provider],
+            })
+            .unwrap_or_else(|_| Value::Table(toml::map::Map::new())),
+        );
+    }
+
+    if let Some(enabled) = legacy_tts_enabled {
+        let speech = ai_table
+            .entry("speech")
+            .or_insert_with(|| Value::try_from(AiSpeechConfig::default()).unwrap());
+        let Some(speech_table) = speech.as_table_mut() else {
+            return;
+        };
+        let tts = speech_table
+            .entry("tts")
+            .or_insert_with(|| Value::try_from(AiSpeechTtsConfig::default()).unwrap());
+        if let Some(tts_table) = tts.as_table_mut() {
+            tts_table.insert("enabled".to_string(), Value::Boolean(enabled));
+        }
+    }
+}
+
+fn sanitize_ai_provider_id(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+
+    sanitized.trim_matches('-').to_string()
 }
