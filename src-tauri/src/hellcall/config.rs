@@ -58,6 +58,20 @@ fn default_ai_chat_model() -> String {
     "deepseek-ai/DeepSeek-V3.2".to_string()
 }
 
+fn default_ai_llm_enabled() -> bool {
+    true
+}
+
+fn default_ai_reply_enabled() -> bool {
+    true
+}
+
+fn default_ai_context_event_count() -> usize {
+    12
+}
+
+const AI_CONTEXT_EVENT_COUNT_OPTIONS: [usize; 5] = [4, 8, 12, 20, 50];
+
 fn default_ai_stt_model_id() -> String {
     "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17".to_string()
 }
@@ -165,10 +179,16 @@ pub struct AiConfig {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(default)]
 pub struct AiLlmConfig {
-    #[serde(default = "default_ai_llm_provider_id")]
-    pub selected_provider_id: String,
-    #[serde(default = "default_ai_llm_providers")]
-    pub providers: Vec<AiLlmProviderConfig>,
+    #[serde(default = "default_ai_llm_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_ai_reply_enabled")]
+    pub reply_enabled: bool,
+    #[serde(default = "default_ai_context_event_count")]
+    pub context_event_count: usize,
+    #[serde(default)]
+    pub decision: AiLlmStageConfig,
+    #[serde(default)]
+    pub reply: AiLlmStageConfig,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
@@ -190,6 +210,16 @@ pub struct AiLlmProviderConfig {
     pub api_key: String,
     pub chat_model: String,
     pub is_builtin: bool,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
+pub struct AiLlmStageConfig {
+    #[serde(default)]
+    pub kind: AiLlmProviderKind,
+    pub base_url: String,
+    pub api_key: String,
+    pub chat_model: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -231,8 +261,14 @@ pub struct AiAgentConfig {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub system_prompt: String,
+    #[serde(default)]
+    pub persona_prompt: String,
+    #[serde(default)]
     pub chat_model: String,
+    #[serde(default)]
+    pub decision_chat_model: String,
+    #[serde(default)]
+    pub reply_chat_model: String,
     pub temperature: f32,
     pub max_tokens: u32,
     pub enable_thinking: bool,
@@ -334,10 +370,6 @@ fn default_ai_agents() -> Vec<AiAgentConfig> {
     vec![AiAgentConfig::default()]
 }
 
-fn default_ai_llm_providers() -> Vec<AiLlmProviderConfig> {
-    vec![AiLlmProviderConfig::builtin_siliconflow()]
-}
-
 impl Default for AiConfig {
     fn default() -> Self {
         Self {
@@ -353,8 +385,11 @@ impl Default for AiConfig {
 impl Default for AiLlmConfig {
     fn default() -> Self {
         Self {
-            selected_provider_id: default_ai_llm_provider_id(),
-            providers: default_ai_llm_providers(),
+            enabled: default_ai_llm_enabled(),
+            reply_enabled: default_ai_reply_enabled(),
+            context_event_count: default_ai_context_event_count(),
+            decision: AiLlmStageConfig::default(),
+            reply: AiLlmStageConfig::default(),
         }
     }
 }
@@ -382,6 +417,38 @@ impl AiLlmProviderConfig {
 impl Default for AiLlmProviderConfig {
     fn default() -> Self {
         Self::builtin_siliconflow()
+    }
+}
+
+impl AiLlmStageConfig {
+    pub fn runtime_provider(&self, id: &str, name: &str) -> AiLlmProviderConfig {
+        AiLlmProviderConfig {
+            id: id.to_string(),
+            name: name.to_string(),
+            kind: self.kind.clone(),
+            base_url: match self.kind {
+                AiLlmProviderKind::SiliconFlow => default_ai_base_url(),
+                AiLlmProviderKind::OpenAiCompatible => self.base_url.clone(),
+            },
+            api_key: self.api_key.clone(),
+            chat_model: if self.chat_model.trim().is_empty() {
+                default_ai_chat_model()
+            } else {
+                self.chat_model.clone()
+            },
+            is_builtin: false,
+        }
+    }
+}
+
+impl Default for AiLlmStageConfig {
+    fn default() -> Self {
+        Self {
+            kind: AiLlmProviderKind::SiliconFlow,
+            base_url: default_ai_base_url(),
+            api_key: String::new(),
+            chat_model: default_ai_chat_model(),
+        }
     }
 }
 
@@ -421,8 +488,10 @@ impl Default for AiAgentConfig {
             id: default_ai_agent_id(),
             name: "战术副官".to_string(),
             description: "简洁、执行优先的全局作战助手".to_string(),
-            system_prompt: "你是 Hellcall 的战术副官。优先用简洁中文回答；当用户明确要求执行战备、输入方向指令或触发本地动作时，优先调用可用工具完成任务；不要编造工具执行结果。".to_string(),
+            persona_prompt: "你是 Hellcall 的战术副官。优先用简洁中文回答；当用户明确要求执行战备、输入方向指令或触发本地动作时，优先调用可用工具完成任务；不要编造工具执行结果。".to_string(),
             chat_model: String::new(),
+            decision_chat_model: String::new(),
+            reply_chat_model: String::new(),
             temperature: 0.7,
             max_tokens: 2048,
             enable_thinking: false,
@@ -631,6 +700,96 @@ fn migrate_legacy_microphone_config(base_value: &mut Value, old_value: &Value) {
     }
 }
 
+fn sanitize_ai_context_event_count(value: usize) -> usize {
+    if AI_CONTEXT_EVENT_COUNT_OPTIONS.contains(&value) {
+        value
+    } else {
+        default_ai_context_event_count()
+    }
+}
+
+fn llm_provider_to_stage(
+    provider: AiLlmProviderConfig,
+    chat_model: Option<String>,
+) -> AiLlmStageConfig {
+    AiLlmStageConfig {
+        kind: provider.kind,
+        base_url: provider.base_url,
+        api_key: provider.api_key,
+        chat_model: chat_model
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(provider.chat_model),
+    }
+}
+
+fn legacy_agent_chat_model(old_ai: &toml::map::Map<String, Value>, key: &str) -> Option<String> {
+    let default_agent_id = old_ai
+        .get("default_agent_id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    old_ai
+        .get("agents")
+        .and_then(Value::as_array)
+        .and_then(|agents| {
+            agents.iter().find_map(|agent| {
+                let agent_table = agent.as_table()?;
+                if let Some(default_agent_id) = &default_agent_id {
+                    let agent_id = agent_table.get("id").and_then(Value::as_str);
+                    if agent_id != Some(default_agent_id.as_str()) {
+                        return None;
+                    }
+                }
+                agent_table
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+            })
+        })
+        .or_else(|| {
+            old_ai
+                .get("agents")
+                .and_then(Value::as_array)
+                .and_then(|agents| {
+                    agents.iter().find_map(|agent| {
+                        agent
+                            .as_table()
+                            .and_then(|agent_table| agent_table.get(key))
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .map(str::to_string)
+                    })
+                })
+        })
+}
+
+fn provider_from_legacy_llm(
+    old_llm: &toml::map::Map<String, Value>,
+    provider_id_key: &str,
+) -> Option<AiLlmProviderConfig> {
+    let providers = old_llm.get("providers").and_then(Value::as_array)?;
+    let selected_id = old_llm
+        .get(provider_id_key)
+        .and_then(Value::as_str)
+        .or_else(|| old_llm.get("selected_provider_id").and_then(Value::as_str));
+
+    selected_id
+        .and_then(|selected_id| {
+            providers.iter().find_map(|provider| {
+                let provider_config = provider.clone().try_into::<AiLlmProviderConfig>().ok()?;
+                (provider_config.id == selected_id).then_some(provider_config)
+            })
+        })
+        .or_else(|| {
+            providers
+                .first()
+                .and_then(|provider| provider.clone().try_into::<AiLlmProviderConfig>().ok())
+        })
+}
+
 fn migrate_legacy_ai_config(base_value: &mut Value, old_value: &Value) {
     let Some(old_ai) = old_value.get("ai").and_then(Value::as_table) else {
         return;
@@ -674,22 +833,20 @@ fn migrate_legacy_ai_config(base_value: &mut Value, old_value: &Value) {
         || legacy_chat_model.is_some();
 
     if has_legacy_llm_fields {
-        let provider_id = legacy_provider
-            .map(sanitize_ai_provider_id)
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(default_ai_llm_provider_id);
         let provider_kind = match legacy_provider {
             Some("siliconflow") | None => AiLlmProviderKind::SiliconFlow,
             _ => AiLlmProviderKind::OpenAiCompatible,
         };
-        let provider_name = match provider_kind {
-            AiLlmProviderKind::SiliconFlow => "SiliconFlow".to_string(),
-            AiLlmProviderKind::OpenAiCompatible => "Custom Provider".to_string(),
-        };
 
         let provider = AiLlmProviderConfig {
-            id: provider_id.clone(),
-            name: provider_name,
+            id: legacy_provider
+                .map(sanitize_ai_provider_id)
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(default_ai_llm_provider_id),
+            name: match provider_kind {
+                AiLlmProviderKind::SiliconFlow => "SiliconFlow".to_string(),
+                AiLlmProviderKind::OpenAiCompatible => "Custom Provider".to_string(),
+            },
             kind: provider_kind,
             base_url: legacy_base_url
                 .map(ToString::to_string)
@@ -698,17 +855,95 @@ fn migrate_legacy_ai_config(base_value: &mut Value, old_value: &Value) {
             chat_model: legacy_chat_model
                 .map(ToString::to_string)
                 .unwrap_or_else(default_ai_chat_model),
-            is_builtin: provider_id == default_ai_llm_provider_id(),
+            is_builtin: false,
         };
+        let decision_stage = llm_provider_to_stage(
+            provider.clone(),
+            legacy_agent_chat_model(old_ai, "decision_chat_model"),
+        );
+        let reply_stage = llm_provider_to_stage(
+            provider,
+            legacy_agent_chat_model(old_ai, "reply_chat_model"),
+        );
 
         ai_table.insert(
             "llm".to_string(),
             Value::try_from(AiLlmConfig {
-                selected_provider_id: provider_id,
-                providers: vec![provider],
+                enabled: default_ai_llm_enabled(),
+                reply_enabled: default_ai_reply_enabled(),
+                context_event_count: default_ai_context_event_count(),
+                decision: decision_stage,
+                reply: reply_stage,
             })
             .unwrap_or_else(|_| Value::Table(toml::map::Map::new())),
         );
+    }
+
+    if let Some(llm_table) = old_ai.get("llm").and_then(Value::as_table) {
+        let decision_model = legacy_agent_chat_model(old_ai, "decision_chat_model");
+        let reply_model = legacy_agent_chat_model(old_ai, "reply_chat_model");
+
+        let decision_stage = provider_from_legacy_llm(llm_table, "decision_provider_id")
+            .map(|provider| llm_provider_to_stage(provider, decision_model));
+        let reply_stage = provider_from_legacy_llm(llm_table, "reply_provider_id")
+            .map(|provider| llm_provider_to_stage(provider, reply_model));
+
+        let llm = ai_table
+            .entry("llm")
+            .or_insert_with(|| Value::try_from(AiLlmConfig::default()).unwrap());
+        if let Some(llm_base_table) = llm.as_table_mut() {
+            if let Some(count) = llm_base_table
+                .get("context_event_count")
+                .and_then(Value::as_integer)
+                .and_then(|value| usize::try_from(value).ok())
+            {
+                llm_base_table.insert(
+                    "context_event_count".to_string(),
+                    Value::Integer(sanitize_ai_context_event_count(count) as i64),
+                );
+            }
+            if let Some(stage) = decision_stage {
+                llm_base_table.insert(
+                    "decision".to_string(),
+                    Value::try_from(stage).unwrap_or_else(|_| Value::Table(toml::map::Map::new())),
+                );
+            }
+            if let Some(stage) = reply_stage {
+                llm_base_table.insert(
+                    "reply".to_string(),
+                    Value::try_from(stage).unwrap_or_else(|_| Value::Table(toml::map::Map::new())),
+                );
+            }
+        }
+    } else if let Some(llm_base_table) = ai_table.get_mut("llm").and_then(Value::as_table_mut) {
+        if let Some(count) = llm_base_table
+            .get("context_event_count")
+            .and_then(Value::as_integer)
+            .and_then(|value| usize::try_from(value).ok())
+        {
+            llm_base_table.insert(
+                "context_event_count".to_string(),
+                Value::Integer(sanitize_ai_context_event_count(count) as i64),
+            );
+        }
+    }
+
+    if let Some(agents) = ai_table.get_mut("agents").and_then(Value::as_array_mut) {
+        for agent in agents {
+            let Some(agent_table) = agent.as_table_mut() else {
+                continue;
+            };
+            if !agent_table.contains_key("persona_prompt") {
+                if let Some(system_prompt) = agent_table.get("system_prompt").cloned() {
+                    agent_table.insert("persona_prompt".to_string(), system_prompt);
+                }
+            }
+            if !agent_table.contains_key("reply_chat_model") {
+                if let Some(chat_model) = agent_table.get("chat_model").cloned() {
+                    agent_table.insert("reply_chat_model".to_string(), chat_model);
+                }
+            }
+        }
     }
 
     if let Some(enabled) = legacy_tts_enabled {

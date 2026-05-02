@@ -210,7 +210,8 @@
       "conversation": "会话",
       "agent": "Agent",
       "skills": "Skills",
-      "models": "模型"
+      "models": "模型",
+      "debug": "调试"
     },
     "errors": {
       "sync_runtime": "同步 AI 运行时失败。",
@@ -224,13 +225,18 @@
       "name": "Agent 名称",
       "description": "描述",
       "system_prompt": "系统提示词",
+      "persona_prompt": "人设",
+      "decision_chat_model": "决策模型",
+      "reply_chat_model": "回复模型",
+      "model_fallback": "使用提供商默认模型",
       "temperature": "温度",
       "max_tokens": "最大 Token",
       "enable_thinking": "启用深度思考",
       "enable_thinking_hint": "适合需要更慢、更谨慎回答风格的模型或提示词。",
       "new_name": "新 Agent",
       "new_description": "可编辑的自定义助手配置",
-      "new_prompt": "你是 Hellcall 的 AI 操作助手。请在合适时使用工具，不要编造工具执行结果。"
+      "new_prompt": "你是 Hellcall 的 AI 操作助手。请在合适时使用工具，不要编造工具执行结果。",
+      "new_persona": "你是简洁的 Hellcall 战术助手。优先直接回答，只在工具返回成功时声明本地动作已执行。"
     },
     "skills": {
       "title": "Skills",
@@ -240,7 +246,14 @@
     "models": {
       "title": "模型配置",
       "speech_title": "本地语音",
-      "llm_title": "LLM 提供商",
+      "llm_title": "LLM 模型",
+      "llm_enabled": "使用 LLM",
+      "llm_enabled_hint": "关闭后只进行语音转写，不执行决策或回复生成。",
+      "reply_enabled": "进行回复",
+      "reply_enabled_hint": "关闭后只进行决策；可调用工具，但不会进行第二次回复生成。",
+      "context_event_count": "上下文数量",
+      "decision_provider": "决策提供商",
+      "reply_provider": "回复提供商",
       "provider_select": "选择提供商",
       "provider_name": "提供商名称",
       "provider_kind": "提供商类型",
@@ -259,7 +272,37 @@
       "tts_model": "TTS 模型",
       "tts_required": "请先下载所选 TTS 模型，才能启用本地语音播报。",
       "tts_speaker_id": "Speaker ID",
-      "tts_speed": "语速"
+      "tts_speed": "语速",
+      "decision_model_title": "决策模型",
+      "reply_model_title": "回复模型",
+      "custom_openai": "自定义 OpenAI"
+    },
+    "debug": {
+      "title": "AI 调试",
+      "enabled": "调试模式",
+      "enabled_hint": "单独测试 STT、LLM、TTS，不写入正式会话。",
+      "start_test": "开始测试",
+      "stop_test": "停止测试",
+      "stt_title": "STT 录音测试",
+      "stt_hint": "只录音并转写，日志显示是否会进入 LLM，不真的下发。",
+      "llm_input": "用户文本",
+      "llm_placeholder": "输入要走决策/回复调试链路的文本",
+      "tts_input": "回复文本",
+      "tts_placeholder": "输入要合成并播放的回复",
+      "logs": "共享日志",
+      "clear_logs": "清空",
+      "empty_logs": "暂无调试日志。",
+      "errors": {
+        "config_missing": "AI 配置未加载。",
+        "agent_not_ready": "AI Agent 尚未就绪。",
+        "stt_not_ready": "Sherpa Runtime 或 STT 模型尚未就绪。",
+        "tts_not_ready": "Sherpa Runtime 或 TTS 模型尚未就绪。",
+        "tts_disabled": "TTS 未启用。",
+        "llm_disabled": "LLM 未启用。",
+        "decision_key_missing": "缺少决策模型 API Key。",
+        "reply_key_missing": "缺少回复模型 API Key。",
+        "input_required": "需要输入测试文本。"
+      }
     }
   },
   "stratagems": {

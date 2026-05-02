@@ -210,7 +210,8 @@
       "conversation": "Conversation",
       "agent": "Agent",
       "skills": "Skills",
-      "models": "Models"
+      "models": "Models",
+      "debug": "Debug"
     },
     "errors": {
       "sync_runtime": "Failed to sync the AI runtime.",
@@ -224,13 +225,18 @@
       "name": "Agent Name",
       "description": "Description",
       "system_prompt": "System Prompt",
+      "persona_prompt": "Persona",
+      "decision_chat_model": "Decision Model",
+      "reply_chat_model": "Reply Model",
+      "model_fallback": "Use provider default",
       "temperature": "Temperature",
       "max_tokens": "Max Tokens",
       "enable_thinking": "Enable Thinking",
       "enable_thinking_hint": "Reserve this for models or prompts that benefit from a slower, more reflective response path.",
       "new_name": "New Agent",
       "new_description": "Custom editable agent profile",
-      "new_prompt": "You are a helpful AI operator for Hellcall. Use tools when they are available and useful."
+      "new_prompt": "You are a helpful AI operator for Hellcall. Use tools when they are available and useful.",
+      "new_persona": "You are a concise Hellcall tactical assistant. Prefer direct answers and only claim local actions when tools report success."
     },
     "skills": {
       "title": "Skills",
@@ -240,7 +246,14 @@
     "models": {
       "title": "Models",
       "speech_title": "Local Speech",
-      "llm_title": "LLM Provider",
+      "llm_title": "LLM Models",
+      "llm_enabled": "Use LLM",
+      "llm_enabled_hint": "When disabled, speech is transcribed but no decision or reply generation runs.",
+      "reply_enabled": "Generate Reply",
+      "reply_enabled_hint": "When disabled, the decision pass can still call tools, but no second reply pass runs.",
+      "context_event_count": "Context Events",
+      "decision_provider": "Decision Provider",
+      "reply_provider": "Reply Provider",
       "provider_select": "Select Provider",
       "provider_name": "Provider Name",
       "provider_kind": "Provider Type",
@@ -259,7 +272,37 @@
       "tts_model": "TTS Model",
       "tts_required": "Download the selected TTS model before enabling local speech playback.",
       "tts_speaker_id": "Speaker ID",
-      "tts_speed": "Speech Speed"
+      "tts_speed": "Speech Speed",
+      "decision_model_title": "Decision Model",
+      "reply_model_title": "Reply Model",
+      "custom_openai": "Custom OpenAI"
+    },
+    "debug": {
+      "title": "AI Debug",
+      "enabled": "Debug Mode",
+      "enabled_hint": "Use isolated tests for STT, LLM, and TTS without writing to the formal session.",
+      "start_test": "Start Test",
+      "stop_test": "Stop Test",
+      "stt_title": "STT Recording Test",
+      "stt_hint": "Record microphone audio, transcribe it, and only log whether it would enter LLM.",
+      "llm_input": "User Text",
+      "llm_placeholder": "Type text to send through the decision/reply debug path",
+      "tts_input": "Reply Text",
+      "tts_placeholder": "Type text to synthesize and play",
+      "logs": "Shared Log",
+      "clear_logs": "Clear",
+      "empty_logs": "No debug logs yet.",
+      "errors": {
+        "config_missing": "AI config is not loaded.",
+        "agent_not_ready": "AI Agent is not ready.",
+        "stt_not_ready": "Sherpa runtime or STT model is not ready.",
+        "tts_not_ready": "Sherpa runtime or TTS model is not ready.",
+        "tts_disabled": "TTS is disabled.",
+        "llm_disabled": "LLM is disabled.",
+        "decision_key_missing": "Decision model API key is missing.",
+        "reply_key_missing": "Reply model API key is missing.",
+        "input_required": "Input text is required."
+      }
     }
   },
   "stratagems": {
