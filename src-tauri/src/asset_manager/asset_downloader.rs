@@ -1,9 +1,11 @@
 use crate::utils;
+use bzip2::read::BzDecoder;
 use futures_util::StreamExt;
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use std::{fs, io};
+use tar::Archive;
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::OnceCell;
@@ -19,6 +21,7 @@ pub enum AssetType {
     #[allow(dead_code)]
     ZipArchive,
     SevenZipArchive,
+    TarBz2Archive,
     RawFile,
 }
 
@@ -110,7 +113,7 @@ pub async fn download_asset(
             AssetType::RawFile => {
                 emit_download_progress(app_handle, event_name, asset_id, 100, "Complete");
             }
-            AssetType::ZipArchive | AssetType::SevenZipArchive => {
+            AssetType::ZipArchive | AssetType::SevenZipArchive | AssetType::TarBz2Archive => {
                 let extract_root = archive_extract_root(target_path, asset_type)?;
                 emit_download_progress(app_handle, event_name, asset_id, 100, "Extracting...");
 
@@ -155,7 +158,7 @@ pub async fn download_asset(
         let _ = fs::remove_file(&download_path);
         if !target_existed {
             match asset_type {
-                AssetType::ZipArchive | AssetType::SevenZipArchive => {
+                AssetType::ZipArchive | AssetType::SevenZipArchive | AssetType::TarBz2Archive => {
                     let _ = fs::remove_dir_all(target_path);
                 }
                 AssetType::RawFile => {
@@ -178,7 +181,9 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
 
 fn asset_exists(target_path: &Path, asset_type: AssetType) -> bool {
     match asset_type {
-        AssetType::ZipArchive | AssetType::SevenZipArchive => target_path.is_dir(),
+        AssetType::ZipArchive | AssetType::SevenZipArchive | AssetType::TarBz2Archive => {
+            target_path.is_dir()
+        }
         AssetType::RawFile => target_path.is_file(),
     }
 }
@@ -217,6 +222,7 @@ fn archive_extension(asset_type: AssetType) -> Option<&'static str> {
     match asset_type {
         AssetType::ZipArchive => Some("zip"),
         AssetType::SevenZipArchive => Some("7z"),
+        AssetType::TarBz2Archive => Some("tar.bz2"),
         AssetType::RawFile => None,
     }
 }
@@ -243,6 +249,9 @@ fn archive_extract_root(target_path: &Path, asset_type: AssetType) -> Result<&Pa
         AssetType::SevenZipArchive => {
             "7z archive target path must have a parent directory.".to_string()
         }
+        AssetType::TarBz2Archive => {
+            "tar.bz2 archive target path must have a parent directory.".to_string()
+        }
         AssetType::RawFile => "Raw file target path must have a parent directory.".to_string(),
     })
 }
@@ -250,7 +259,7 @@ fn archive_extract_root(target_path: &Path, asset_type: AssetType) -> Result<&Pa
 fn is_archive_asset(asset_type: AssetType) -> bool {
     matches!(
         asset_type,
-        AssetType::ZipArchive | AssetType::SevenZipArchive
+        AssetType::ZipArchive | AssetType::SevenZipArchive | AssetType::TarBz2Archive
     )
 }
 
@@ -262,6 +271,7 @@ fn extract_archive(
     match asset_type {
         AssetType::ZipArchive => extract_zip_archive(archive_path, output_dir),
         AssetType::SevenZipArchive => extract_7z_archive(archive_path, output_dir),
+        AssetType::TarBz2Archive => extract_tar_bz2_archive(archive_path, output_dir),
         AssetType::RawFile => Ok(()),
     }
 }
@@ -316,6 +326,39 @@ fn extract_7z_archive(archive_path: &Path, output_dir: &Path) -> Result<(), Stri
         Ok(true)
     })
     .map_err(|e| utils::format_and_log_error("Failed to extract 7z archive", e))
+}
+
+fn extract_tar_bz2_archive(archive_path: &Path, output_dir: &Path) -> Result<(), String> {
+    let file = fs::File::open(archive_path)
+        .map_err(|e| utils::format_and_log_error("Failed to open downloaded archive", e))?;
+    let decoder = BzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+
+    for entry in archive
+        .entries()
+        .map_err(|e| utils::format_and_log_error("Failed to read tar.bz2 archive", e))?
+    {
+        let mut entry = entry
+            .map_err(|e| utils::format_and_log_error("Failed to inspect tar.bz2 entry", e))?;
+        let relative_path = normalize_archive_relative_path(
+            &entry
+                .path()
+                .map_err(|e| utils::format_and_log_error("Failed to resolve tar.bz2 entry path", e))?,
+        )?;
+        let destination = output_dir.join(relative_path);
+
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                utils::format_and_log_error("Failed to create extracted parent directory", e)
+            })?;
+        }
+
+        entry
+            .unpack(&destination)
+            .map_err(|e| utils::format_and_log_error("Failed to extract tar.bz2 entry", e))?;
+    }
+
+    Ok(())
 }
 
 fn extract_7z_entry(
