@@ -24,3 +24,15 @@ export interface AiLiveToolActivity {
   name: string;
   summary: string;
 }
+
+export type AiDebugStage = "stt" | "llm" | "tts";
+
+export interface AiDebugLogPayload {
+  id: string;
+  stage: AiDebugStage;
+  level: "info" | "success" | "warn" | "error";
+  message: string;
+  detail?: unknown;
+  elapsed_ms?: number;
+  created_at_ms: number;
+}

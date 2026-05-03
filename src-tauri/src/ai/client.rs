@@ -111,12 +111,7 @@ pub async fn stream_chat_completion(
         while let Some(boundary) = pending.find("\n\n") {
             let event = pending[..boundary].to_string();
             pending = pending[boundary + 2..].to_string();
-            process_stream_event(
-                &event,
-                &mut content,
-                &mut partial_tool_calls,
-                &mut on_delta,
-            )?;
+            process_stream_event(&event, &mut content, &mut partial_tool_calls, &mut on_delta)?;
         }
     }
 
@@ -145,13 +140,17 @@ pub async fn stream_chat_completion(
         })
         .collect::<Vec<_>>();
 
-    Ok(ChatStreamResult { content, tool_calls })
+    Ok(ChatStreamResult {
+        content,
+        tool_calls,
+    })
 }
 
 pub fn build_chat_request_body(
     model: &str,
     messages: Vec<Value>,
     tools: Vec<Value>,
+    tool_choice: Option<Value>,
     temperature: f32,
     max_tokens: u32,
     stream: bool,
@@ -166,7 +165,7 @@ pub fn build_chat_request_body(
 
     if !tools.is_empty() {
         body["tools"] = Value::Array(tools);
-        body["tool_choice"] = Value::String("auto".to_string());
+        body["tool_choice"] = tool_choice.unwrap_or_else(|| Value::String("auto".to_string()));
     }
 
     body

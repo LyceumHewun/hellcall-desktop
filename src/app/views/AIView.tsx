@@ -7,7 +7,12 @@ import { toast } from "sonner";
 import { useConfigStore } from "../../store/configStore";
 import { useAiStore } from "../../store/aiStore";
 import { useEngineStore } from "../../store/engineStore";
-import { AiLiveToolActivity, AiSessionEvent } from "../../types/ai";
+import {
+  AiDebugLogPayload,
+  AiDebugStage,
+  AiLiveToolActivity,
+  AiSessionEvent,
+} from "../../types/ai";
 import { AssetModelSelector } from "../components/AssetModelSelector";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -33,6 +38,7 @@ const AVAILABLE_SKILLS = [
 
 const NOOP = (..._args: unknown[]) => undefined;
 const SHERPA_RUNTIME_ID = "sherpa-onnx-v1.12.9-win-x64-shared";
+const CONTEXT_EVENT_COUNT_OPTIONS = [4, 8, 12, 20, 50];
 
 function formatTimestamp(value: number) {
   return new Date(value).toLocaleString();
@@ -48,6 +54,18 @@ function formatStructuredText(value: string | null | undefined) {
   } catch {
     return value;
   }
+}
+
+function formatDebugDetail(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return formatStructuredText(value);
+  }
+
+  return JSON.stringify(value, null, 2);
 }
 
 function parseToolCalls(event: AiSessionEvent) {
@@ -162,6 +180,19 @@ function toolPhaseClasses(phase: AiLiveToolActivity["phase"]) {
   }
 }
 
+function debugLevelClasses(level: AiDebugLogPayload["level"]) {
+  switch (level) {
+    case "success":
+      return "border-emerald-400/25 bg-emerald-400/8 text-emerald-100";
+    case "warn":
+      return "border-amber-400/30 bg-amber-400/10 text-amber-100";
+    case "error":
+      return "border-red-500/30 bg-red-500/10 text-red-100";
+    default:
+      return "border-white/10 bg-black/20 text-white/80";
+  }
+}
+
 function toolPhaseLabel(
   phase: AiLiveToolActivity["phase"],
   t: (key: string) => string,
@@ -204,10 +235,44 @@ export function AIView() {
     fetchSession,
   } = useAiStore();
   const isManualHoldRef = useRef(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [debugActiveTab, setDebugActiveTab] = useState<AiDebugStage>("stt");
+  const [debugRunningStage, setDebugRunningStage] =
+    useState<AiDebugStage | null>(null);
+  const [debugLogs, setDebugLogs] = useState<AiDebugLogPayload[]>([]);
+  const [llmDebugInput, setLlmDebugInput] = useState("");
+  const [ttsDebugInput, setTtsDebugInput] = useState("");
 
   useEffect(() => {
     fetchSession();
   }, [fetchSession]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    const promise = listen<AiDebugLogPayload>("ai-debug-log", (event) => {
+      setDebugLogs((logs) => [...logs, event.payload]);
+      if (
+        event.payload.message === "test finished" ||
+        event.payload.message === "test stopped" ||
+        event.payload.level === "error"
+      ) {
+        setDebugRunningStage((stage) =>
+          stage === event.payload.stage ? null : stage,
+        );
+      }
+    }).then((fn) => {
+      unlisten = fn;
+      return fn;
+    });
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      } else {
+        promise.then((fn) => fn());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!config || config.mode !== "ai_agent") {
@@ -391,6 +456,192 @@ export function AIView() {
     }
   };
 
+  const appendDebugLog = (
+    stage: AiDebugStage,
+    level: AiDebugLogPayload["level"],
+    message: string,
+    detail?: unknown,
+  ) => {
+    setDebugLogs((logs) => [
+      ...logs,
+      {
+        id: `local-debug-${Date.now()}-${logs.length}`,
+        stage,
+        level,
+        message,
+        detail,
+        created_at_ms: Date.now(),
+      },
+    ]);
+  };
+
+  const validateDebugPreconditions = (stage: AiDebugStage) => {
+    if (!config) {
+      appendDebugLog(stage, "error", t("ai.debug.errors.config_missing"));
+      return false;
+    }
+
+    if (aiStatus !== "READY") {
+      appendDebugLog(stage, "error", t("ai.debug.errors.agent_not_ready"));
+      return false;
+    }
+
+    if (stage === "stt") {
+      if (runtimeReady === false || sttReady === false) {
+        appendDebugLog(stage, "error", t("ai.debug.errors.stt_not_ready"));
+        return false;
+      }
+      return true;
+    }
+
+    if (stage === "llm") {
+      if (!config.ai.llm.enabled) {
+        appendDebugLog(stage, "error", t("ai.debug.errors.llm_disabled"));
+        return false;
+      }
+      if (!config.ai.llm.decision.api_key.trim()) {
+        appendDebugLog(stage, "error", t("ai.debug.errors.decision_key_missing"));
+        return false;
+      }
+      if (config.ai.llm.reply_enabled && !config.ai.llm.reply.api_key.trim()) {
+        appendDebugLog(stage, "error", t("ai.debug.errors.reply_key_missing"));
+        return false;
+      }
+      return true;
+    }
+
+    if (!config.ai.speech.tts.enabled) {
+      appendDebugLog(stage, "error", t("ai.debug.errors.tts_disabled"));
+      return false;
+    }
+    if (runtimeReady === false || ttsReady === false) {
+      appendDebugLog(stage, "error", t("ai.debug.errors.tts_not_ready"));
+      return false;
+    }
+    return true;
+  };
+
+  const toggleDebugEnabled = async (enabled: boolean) => {
+    setDebugEnabled(enabled);
+    if (!enabled && debugRunningStage) {
+      try {
+        await invoke("stop_ai_debug_test");
+      } catch (stopError) {
+        appendDebugLog(
+          debugRunningStage,
+          "error",
+          stopError instanceof Error ? stopError.message : String(stopError),
+        );
+      } finally {
+        setDebugRunningStage(null);
+      }
+    }
+  };
+
+  const toggleDebugSttTest = async () => {
+    if (debugRunningStage === "stt") {
+      try {
+        await invoke("stop_ai_debug_stt_recording");
+      } catch (debugError) {
+        appendDebugLog(
+          "stt",
+          "error",
+          debugError instanceof Error ? debugError.message : String(debugError),
+        );
+      } finally {
+        setDebugRunningStage(null);
+      }
+      return;
+    }
+    if (debugRunningStage || !validateDebugPreconditions("stt")) {
+      return;
+    }
+
+    try {
+      await invoke("start_ai_debug_stt_recording");
+      setDebugRunningStage("stt");
+    } catch (debugError) {
+      appendDebugLog(
+        "stt",
+        "error",
+        debugError instanceof Error ? debugError.message : String(debugError),
+      );
+      setDebugRunningStage(null);
+    }
+  };
+
+  const toggleDebugLlmTest = async () => {
+    if (debugRunningStage === "llm") {
+      try {
+        await invoke("stop_ai_debug_test");
+      } catch (debugError) {
+        appendDebugLog(
+          "llm",
+          "error",
+          debugError instanceof Error ? debugError.message : String(debugError),
+        );
+      } finally {
+        setDebugRunningStage(null);
+      }
+      return;
+    }
+    if (debugRunningStage || !validateDebugPreconditions("llm")) {
+      return;
+    }
+    if (!llmDebugInput.trim()) {
+      appendDebugLog("llm", "error", t("ai.debug.errors.input_required"));
+      return;
+    }
+
+    try {
+      setDebugRunningStage("llm");
+      await invoke("start_ai_debug_llm_test", { inputText: llmDebugInput });
+    } catch (debugError) {
+      appendDebugLog(
+        "llm",
+        "error",
+        debugError instanceof Error ? debugError.message : String(debugError),
+      );
+      setDebugRunningStage(null);
+    }
+  };
+
+  const toggleDebugTtsTest = async () => {
+    if (debugRunningStage === "tts") {
+      try {
+        await invoke("stop_ai_debug_test");
+      } catch (debugError) {
+        appendDebugLog(
+          "tts",
+          "error",
+          debugError instanceof Error ? debugError.message : String(debugError),
+        );
+      } finally {
+        setDebugRunningStage(null);
+      }
+      return;
+    }
+    if (debugRunningStage || !validateDebugPreconditions("tts")) {
+      return;
+    }
+    if (!ttsDebugInput.trim()) {
+      appendDebugLog("tts", "error", t("ai.debug.errors.input_required"));
+      return;
+    }
+
+    try {
+      setDebugRunningStage("tts");
+      await invoke("start_ai_debug_tts_test", { inputText: ttsDebugInput });
+    } catch (debugError) {
+      appendDebugLog(
+        "tts",
+        "error",
+        debugError instanceof Error ? debugError.message : String(debugError),
+      );
+      setDebugRunningStage(null);
+    }
+  };
+
   const currentAgent = useMemo(() => {
     if (!config) {
       return null;
@@ -399,20 +650,6 @@ export function AIView() {
     return (
       config.ai.agents.find((agent) => agent.id === config.ai.default_agent_id) ??
       config.ai.agents[0] ??
-      null
-    );
-  }, [config]);
-
-  const currentProvider = useMemo(() => {
-    if (!config) {
-      return null;
-    }
-
-    return (
-      config.ai.llm.providers.find(
-        (provider) => provider.id === config.ai.llm.selected_provider_id,
-      ) ??
-      config.ai.llm.providers[0] ??
       null
     );
   }, [config]);
@@ -505,24 +742,6 @@ export function AIView() {
     });
   };
 
-  const updateCurrentProvider = (
-    updater: (draft: NonNullable<typeof currentProvider>) => void,
-  ) => {
-    if (!currentProvider) {
-      return;
-    }
-
-    updateConfig((draft) => {
-      const target = draft.ai.llm.providers.find(
-        (provider) => provider.id === currentProvider.id,
-      );
-      if (!target) {
-        return;
-      }
-      updater(target as NonNullable<typeof currentProvider>);
-    });
-  };
-
   const addAgent = () => {
     if (!config) {
       return;
@@ -534,8 +753,10 @@ export function AIView() {
         id: nextId,
         name: t("ai.agent.new_name"),
         description: t("ai.agent.new_description"),
-        system_prompt: t("ai.agent.new_prompt"),
+        persona_prompt: t("ai.agent.new_persona"),
         chat_model: "",
+        decision_chat_model: "",
+        reply_chat_model: "",
         temperature: 0.7,
         max_tokens: 2048,
         enable_thinking: false,
@@ -557,47 +778,89 @@ export function AIView() {
     });
   };
 
-  const addProvider = () => {
-    if (!config) {
-      return;
-    }
-
-    const nextId = crypto.randomUUID();
-    updateConfig((draft) => {
-      draft.ai.llm.providers.push({
-        id: nextId,
-        name: "Custom Provider",
-        kind: "openai_compatible",
-        base_url: "https://api.openai.com/v1",
-        api_key: "",
-        chat_model: "",
-        is_builtin: false,
-      });
-      draft.ai.llm.selected_provider_id = nextId;
-    });
-  };
-
-  const deleteCurrentProvider = () => {
-    if (
-      !config ||
-      !currentProvider ||
-      currentProvider.is_builtin ||
-      config.ai.llm.providers.length <= 1
-    ) {
-      return;
-    }
-
-    updateConfig((draft) => {
-      draft.ai.llm.providers = draft.ai.llm.providers.filter(
-        (provider) => provider.id !== currentProvider.id,
-      );
-      draft.ai.llm.selected_provider_id = draft.ai.llm.providers[0]?.id ?? "";
-    });
-  };
-
   if (!config) {
     return null;
   }
+
+  const renderLlmStageConfig = (
+    stage: "decision" | "reply",
+    title: string,
+  ) => {
+    const stageConfig = config.ai.llm[stage];
+
+    return (
+      <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-3">
+        <p className="text-sm font-medium text-white">{title}</p>
+
+        <div className="space-y-2">
+          <Label>{t("ai.models.provider_kind")}</Label>
+          <Select
+            value={stageConfig.kind}
+            onValueChange={(value: "siliconflow" | "openai_compatible") =>
+              updateConfig((draft) => {
+                draft.ai.llm[stage].kind = value;
+                if (value === "siliconflow") {
+                  draft.ai.llm[stage].base_url = "https://api.siliconflow.cn/v1";
+                }
+              })
+            }
+          >
+            <SelectTrigger className="bg-black/30 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 bg-[#1E2128] text-white">
+              <SelectItem value="siliconflow">SiliconFlow</SelectItem>
+              <SelectItem value="openai_compatible">
+                {t("ai.models.custom_openai")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {stageConfig.kind === "openai_compatible" ? (
+          <div className="space-y-2">
+            <Label>{t("ai.models.base_url")}</Label>
+            <Input
+              className="bg-black/30 border-white/10"
+              value={stageConfig.base_url}
+              onChange={(event) =>
+                updateConfig((draft) => {
+                  draft.ai.llm[stage].base_url = event.target.value;
+                })
+              }
+            />
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <Label>{t("ai.models.api_key")}</Label>
+          <Input
+            type="password"
+            className="bg-black/30 border-white/10"
+            value={stageConfig.api_key}
+            onChange={(event) =>
+              updateConfig((draft) => {
+                draft.ai.llm[stage].api_key = event.target.value;
+              })
+            }
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>{t("ai.models.chat_model")}</Label>
+          <Input
+            className="bg-black/30 border-white/10"
+            value={stageConfig.chat_model}
+            onChange={(event) =>
+              updateConfig((draft) => {
+                draft.ai.llm[stage].chat_model = event.target.value;
+              })
+            }
+          />
+        </div>
+      </div>
+    );
+  };
 
   if (config.mode !== "ai_agent") {
     return (
@@ -630,11 +893,12 @@ export function AIView() {
     <div className="flex min-h-0 flex-1 bg-[#0C0E12]">
       <Tabs defaultValue="conversation" className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
         <div className="pb-3">
-          <TabsList className="grid w-full grid-cols-4 bg-white/5">
+          <TabsList className="grid w-full grid-cols-5 bg-white/5">
             <TabsTrigger value="conversation">{t("ai.tabs.conversation")}</TabsTrigger>
             <TabsTrigger value="agent">{t("ai.tabs.agent")}</TabsTrigger>
             <TabsTrigger value="skills">{t("ai.tabs.skills")}</TabsTrigger>
             <TabsTrigger value="models">{t("ai.tabs.models")}</TabsTrigger>
+            <TabsTrigger value="debug">{t("ai.tabs.debug")}</TabsTrigger>
           </TabsList>
         </div>
 
@@ -899,13 +1163,13 @@ export function AIView() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label>{t("ai.agent.system_prompt")}</Label>
+                        <Label>{t("ai.agent.persona_prompt")}</Label>
                         <Textarea
                           className="min-h-40 bg-black/30 border-white/10"
-                          value={currentAgent.system_prompt}
+                          value={currentAgent.persona_prompt}
                           onChange={(event) =>
                             updateCurrentAgent((draft) => {
-                              draft.system_prompt = event.target.value;
+                              draft.persona_prompt = event.target.value;
                             })
                           }
                         />
@@ -1180,122 +1444,72 @@ export function AIView() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                      <Select
-                        value={config.ai.llm.selected_provider_id}
-                        onValueChange={(value) =>
-                          updateConfig((draft) => {
-                            draft.ai.llm.selected_provider_id = value;
-                          })
-                        }
-                      >
-                        <SelectTrigger className="min-w-0 flex-1 bg-black/30 text-white">
-                          <SelectValue placeholder={t("ai.models.provider_select")} />
-                        </SelectTrigger>
-                        <SelectContent className="border-white/10 bg-[#1E2128] text-white">
-                          {config.ai.llm.providers.map((provider) => (
-                            <SelectItem key={provider.id} value={provider.id}>
-                              {provider.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-white">{t("ai.models.llm_enabled")}</p>
+                          <p className="text-xs text-white/45">
+                            {t("ai.models.llm_enabled_hint")}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={config.ai.llm.enabled}
+                          onCheckedChange={(checked) =>
+                            updateConfig((draft) => {
+                              draft.ai.llm.enabled = checked;
+                            })
+                          }
+                        />
+                      </div>
 
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer border-white/10 bg-black/20 hover:bg-white/10"
-                        onClick={addProvider}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer border-white/10 bg-black/20 hover:bg-red-500/10 hover:text-red-300"
-                        disabled={
-                          !currentProvider ||
-                          currentProvider.is_builtin ||
-                          config.ai.llm.providers.length <= 1
-                        }
-                        onClick={deleteCurrentProvider}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-white">{t("ai.models.reply_enabled")}</p>
+                          <p className="text-xs text-white/45">
+                            {t("ai.models.reply_enabled_hint")}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={config.ai.llm.reply_enabled}
+                          onCheckedChange={(checked) =>
+                            updateConfig((draft) => {
+                              draft.ai.llm.reply_enabled = checked;
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>{t("ai.models.context_event_count")}</Label>
+                        <Select
+                          value={String(config.ai.llm.context_event_count)}
+                          onValueChange={(value) =>
+                            updateConfig((draft) => {
+                              draft.ai.llm.context_event_count = Number(value);
+                            })
+                          }
+                        >
+                          <SelectTrigger className="bg-black/30 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-white/10 bg-[#1E2128] text-white">
+                            {CONTEXT_EVENT_COUNT_OPTIONS.map((count) => (
+                              <SelectItem key={count} value={String(count)}>
+                                {count}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
-                    {currentProvider ? (
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label>{t("ai.models.provider_name")}</Label>
-                          <Input
-                            className="bg-black/30 border-white/10"
-                            value={currentProvider.name}
-                            onChange={(event) =>
-                              updateCurrentProvider((draft) => {
-                                draft.name = event.target.value;
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("ai.models.provider_kind")}</Label>
-                          <Select
-                            value={currentProvider.kind}
-                            onValueChange={(value: "siliconflow" | "openai_compatible") =>
-                              updateCurrentProvider((draft) => {
-                                draft.kind = value;
-                              })
-                            }
-                          >
-                            <SelectTrigger className="bg-black/30 text-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="border-white/10 bg-[#1E2128] text-white">
-                              <SelectItem value="siliconflow">SiliconFlow</SelectItem>
-                              <SelectItem value="openai_compatible">
-                                OpenAI Compatible
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("ai.models.base_url")}</Label>
-                          <Input
-                            className="bg-black/30 border-white/10"
-                            value={currentProvider.base_url}
-                            onChange={(event) =>
-                              updateCurrentProvider((draft) => {
-                                draft.base_url = event.target.value;
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("ai.models.api_key")}</Label>
-                          <Input
-                            type="password"
-                            className="bg-black/30 border-white/10"
-                            value={currentProvider.api_key}
-                            onChange={(event) =>
-                              updateCurrentProvider((draft) => {
-                                draft.api_key = event.target.value;
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t("ai.models.chat_model")}</Label>
-                          <Input
-                            className="bg-black/30 border-white/10"
-                            value={currentProvider.chat_model}
-                            onChange={(event) =>
-                              updateCurrentProvider((draft) => {
-                                draft.chat_model = event.target.value;
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    ) : null}
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                      {renderLlmStageConfig(
+                        "decision",
+                        t("ai.models.decision_model_title"),
+                      )}
+                      {renderLlmStageConfig("reply", t("ai.models.reply_model_title"))}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1304,6 +1518,185 @@ export function AIView() {
                     {error}
                   </div>
                 ) : null}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="debug" className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <Card className="border-white/10 bg-[#1A1D24] text-white">
+                  <CardHeader>
+                    <CardTitle className="text-[#FCE100]">
+                      {t("ai.debug.title")}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 p-3">
+                      <div>
+                        <p className="text-sm text-white">{t("ai.debug.enabled")}</p>
+                        <p className="text-xs text-white/45">
+                          {t("ai.debug.enabled_hint")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={debugEnabled}
+                        onCheckedChange={(checked) => void toggleDebugEnabled(checked)}
+                      />
+                    </div>
+
+                    {debugEnabled ? (
+                      <div className="space-y-4">
+                        <Tabs
+                          value={debugActiveTab}
+                          onValueChange={(value) =>
+                            setDebugActiveTab(value as AiDebugStage)
+                          }
+                          className="space-y-4"
+                        >
+                          <TabsList className="grid w-full grid-cols-3 bg-white/5">
+                            <TabsTrigger value="stt">STT</TabsTrigger>
+                            <TabsTrigger value="llm">LLM</TabsTrigger>
+                            <TabsTrigger value="tts">TTS</TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="stt" className="mt-0">
+                            <div className="space-y-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                              <div>
+                                <p className="text-sm font-medium text-white">
+                                  {t("ai.debug.stt_title")}
+                                </p>
+                                <p className="mt-1 text-xs text-white/45">
+                                  {t("ai.debug.stt_hint")}
+                                </p>
+                              </div>
+                              <Button
+                                className="bg-[#FCE100] text-black hover:bg-[#FCE100]/90"
+                                disabled={
+                                  Boolean(debugRunningStage) &&
+                                  debugRunningStage !== "stt"
+                                }
+                                onClick={() => void toggleDebugSttTest()}
+                              >
+                                {debugRunningStage === "stt"
+                                  ? t("ai.debug.stop_test")
+                                  : t("ai.debug.start_test")}
+                              </Button>
+                            </div>
+                          </TabsContent>
+
+                          <TabsContent value="llm" className="mt-0">
+                            <div className="space-y-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                              <div className="space-y-2">
+                                <Label>{t("ai.debug.llm_input")}</Label>
+                                <Textarea
+                                  className="min-h-28 bg-black/30 border-white/10"
+                                  value={llmDebugInput}
+                                  onChange={(event) =>
+                                    setLlmDebugInput(event.target.value)
+                                  }
+                                  placeholder={t("ai.debug.llm_placeholder")}
+                                />
+                              </div>
+                              <Button
+                                className="bg-[#FCE100] text-black hover:bg-[#FCE100]/90"
+                                disabled={
+                                  Boolean(debugRunningStage) &&
+                                  debugRunningStage !== "llm"
+                                }
+                                onClick={() => void toggleDebugLlmTest()}
+                              >
+                                {debugRunningStage === "llm"
+                                  ? t("ai.debug.stop_test")
+                                  : t("ai.debug.start_test")}
+                              </Button>
+                            </div>
+                          </TabsContent>
+
+                          <TabsContent value="tts" className="mt-0">
+                            <div className="space-y-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                              <div className="space-y-2">
+                                <Label>{t("ai.debug.tts_input")}</Label>
+                                <Textarea
+                                  className="min-h-28 bg-black/30 border-white/10"
+                                  value={ttsDebugInput}
+                                  onChange={(event) =>
+                                    setTtsDebugInput(event.target.value)
+                                  }
+                                  placeholder={t("ai.debug.tts_placeholder")}
+                                />
+                              </div>
+                              <Button
+                                className="bg-[#FCE100] text-black hover:bg-[#FCE100]/90"
+                                disabled={
+                                  Boolean(debugRunningStage) &&
+                                  debugRunningStage !== "tts"
+                                }
+                                onClick={() => void toggleDebugTtsTest()}
+                              >
+                                {debugRunningStage === "tts"
+                                  ? t("ai.debug.stop_test")
+                                  : t("ai.debug.start_test")}
+                              </Button>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+
+                        <div className="rounded-lg border border-white/10 bg-black/20">
+                          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+                            <p className="text-sm font-medium text-white">
+                              {t("ai.debug.logs")}
+                            </p>
+                            <Button
+                              variant="outline"
+                              className="h-8 border-white/10 bg-black/20 px-3 text-xs hover:bg-white/10"
+                              onClick={() => setDebugLogs([])}
+                            >
+                              {t("ai.debug.clear_logs")}
+                            </Button>
+                          </div>
+                          <div className="max-h-96 space-y-2 overflow-y-auto p-3">
+                            {debugLogs.length === 0 ? (
+                              <p className="text-sm text-white/45">
+                                {t("ai.debug.empty_logs")}
+                              </p>
+                            ) : (
+                              debugLogs.map((log) => {
+                                const detail = formatDebugDetail(log.detail);
+
+                                return (
+                                  <div
+                                    key={log.id}
+                                    className={`rounded-lg border p-3 ${debugLevelClasses(
+                                      log.level,
+                                    )}`}
+                                  >
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                      <div className="flex items-center gap-2 uppercase tracking-[0.14em]">
+                                        <span>{log.stage}</span>
+                                        <span>{log.level}</span>
+                                        {log.elapsed_ms !== undefined ? (
+                                          <span>{log.elapsed_ms}ms</span>
+                                        ) : null}
+                                      </div>
+                                      <span className="text-white/35">
+                                        {formatTimestamp(log.created_at_ms)}
+                                      </span>
+                                    </div>
+                                    <p className="break-words text-sm">{log.message}</p>
+                                    {detail ? (
+                                      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/70">
+                                        {detail}
+                                      </pre>
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
       </Tabs>

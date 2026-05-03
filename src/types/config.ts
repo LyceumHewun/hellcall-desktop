@@ -12,9 +12,19 @@ export interface AiLlmProviderConfig {
   is_builtin: boolean;
 }
 
+export interface AiLlmStageConfig {
+  kind: AiLlmProviderKind;
+  base_url: string;
+  api_key: string;
+  chat_model: string;
+}
+
 export interface AiLlmConfig {
-  selected_provider_id: string;
-  providers: AiLlmProviderConfig[];
+  enabled: boolean;
+  reply_enabled: boolean;
+  context_event_count: number;
+  decision: AiLlmStageConfig;
+  reply: AiLlmStageConfig;
 }
 
 export interface AiSpeechSttConfig {
@@ -39,8 +49,10 @@ export interface AiAgentConfig {
   id: string;
   name: string;
   description: string;
-  system_prompt: string;
+  persona_prompt: string;
   chat_model: string;
+  decision_chat_model: string;
+  reply_chat_model: string;
   temperature: number;
   max_tokens: number;
   enable_thinking: boolean;
