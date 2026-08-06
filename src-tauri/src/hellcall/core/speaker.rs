@@ -4,8 +4,13 @@ use rodio::buffer::SamplesBuffer;
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink, Source};
 use std::fs::File;
 use std::path::Path;
-use std::sync::{mpsc::Sender, Arc, RwLock};
+use std::collections::VecDeque;
+use std::sync::{
+    mpsc::{Receiver, Sender},
+    Arc, RwLock,
+};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use super::microphone::{MicPassthroughHandle, VirtualMicMixer};
 
@@ -29,8 +34,14 @@ struct DecodedAudio {
     samples: Vec<f32>,
 }
 
+enum PlaybackRequest {
+    File(String),
+    Samples(DecodedAudio, Option<Sender<()>>),
+    Stop,
+}
+
 pub struct Speaker {
-    tx: Sender<String>,
+    tx: Sender<PlaybackRequest>,
     config: Arc<RwLock<SpeakerRuntimeConfig>>,
     mic_passthrough: Option<MicPassthroughHandle>,
     virtual_mic_input_volume: Option<Arc<RwLock<f32>>>,
@@ -87,13 +98,31 @@ impl Speaker {
         local_stream: Option<OutputStream>,
         virtual_mic: Option<VirtualMicMixer>,
         config: Arc<RwLock<SpeakerRuntimeConfig>>,
-    ) -> (Sender<String>, JoinHandle<Result<()>>) {
-        let (tx, rx) = std::sync::mpsc::channel::<String>();
+    ) -> (Sender<PlaybackRequest>, JoinHandle<Result<()>>) {
+        let (tx, rx) = std::sync::mpsc::channel::<PlaybackRequest>();
         let handle = std::thread::spawn(move || -> Result<()> {
-            while let Ok(audio_path) = rx.recv() {
-                info!("play audio: {}", &audio_path);
+            let mut pending_requests = VecDeque::new();
+            loop {
+                let request = match pending_requests.pop_front() {
+                    Some(request) => request,
+                    None => match rx.recv() {
+                        Ok(request) => request,
+                        Err(_) => break,
+                    },
+                };
+                if matches!(request, PlaybackRequest::Stop) {
+                    continue;
+                }
+
                 let playback_config = config.read().expect("speaker config poisoned").clone();
-                let audio = decode_audio_file(&audio_path)?;
+                let (audio, completion) = match request {
+                    PlaybackRequest::File(audio_path) => {
+                        info!("play audio: {}", &audio_path);
+                        (decode_audio_file(&audio_path)?, None)
+                    }
+                    PlaybackRequest::Samples(audio, completion) => (audio, completion),
+                    PlaybackRequest::Stop => unreachable!(),
+                };
 
                 let local_sink = if playback_config.monitor_local_playback {
                     create_sink(local_stream.as_ref(), &audio, |sink| {
@@ -119,16 +148,19 @@ impl Speaker {
 
                 if local_sink.is_none() && virtual_sink.is_none() {
                     warn!("audio playback ignored because no playback target is enabled");
+                    if let Some(completion) = completion {
+                        let _ = completion.send(());
+                    }
                     continue;
                 }
 
                 if playback_config.sleep_until_end {
-                    if let Some(sink) = local_sink {
-                        sink.sleep_until_end();
-                    }
-                    if let Some(sink) = virtual_sink {
-                        sink.sleep_until_end();
-                    }
+                    wait_for_sinks_or_stop(
+                        &rx,
+                        &mut pending_requests,
+                        local_sink,
+                        virtual_sink,
+                    );
                 } else {
                     if let Some(sink) = local_sink {
                         sink.detach();
@@ -136,6 +168,9 @@ impl Speaker {
                     if let Some(sink) = virtual_sink {
                         sink.detach();
                     }
+                }
+                if let Some(completion) = completion {
+                    let _ = completion.send(());
                 }
             }
 
@@ -160,11 +195,98 @@ impl Speaker {
 
     pub fn play_wav(&self, path: &str) -> Result<()> {
         if Path::new(path).exists() {
-            self.tx.send(path.to_string())?;
+            self.tx.send(PlaybackRequest::File(path.to_string()))?;
         } else {
             warn!("audio file not found: {}", path)
         }
         Ok(())
+    }
+
+    pub fn play_pcm_f32(
+        &self,
+        channels: u16,
+        sample_rate: u32,
+        samples: Vec<f32>,
+    ) -> Result<()> {
+        self.tx.send(PlaybackRequest::Samples(
+            DecodedAudio {
+                channels,
+                sample_rate,
+                samples,
+            },
+            None,
+        ))?;
+        Ok(())
+    }
+
+    pub fn play_pcm_f32_and_wait(
+        &self,
+        channels: u16,
+        sample_rate: u32,
+        samples: Vec<f32>,
+    ) -> Result<()> {
+        let done_rx = self.play_pcm_f32_with_completion(channels, sample_rate, samples)?;
+        done_rx.recv()?;
+        Ok(())
+    }
+
+    pub fn play_pcm_f32_with_completion(
+        &self,
+        channels: u16,
+        sample_rate: u32,
+        samples: Vec<f32>,
+    ) -> Result<Receiver<()>> {
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        self.tx.send(PlaybackRequest::Samples(
+            DecodedAudio {
+                channels,
+                sample_rate,
+                samples,
+            },
+            Some(done_tx),
+        ))?;
+        Ok(done_rx)
+    }
+
+    pub fn stop(&self) -> Result<()> {
+        self.tx.send(PlaybackRequest::Stop)?;
+        Ok(())
+    }
+}
+
+fn wait_for_sinks_or_stop(
+    rx: &std::sync::mpsc::Receiver<PlaybackRequest>,
+    pending_requests: &mut VecDeque<PlaybackRequest>,
+    local_sink: Option<Sink>,
+    virtual_sink: Option<Sink>,
+) {
+    let local_sink = local_sink;
+    let virtual_sink = virtual_sink;
+
+    loop {
+        if local_sink.as_ref().is_none_or(Sink::empty)
+            && virtual_sink.as_ref().is_none_or(Sink::empty)
+        {
+            return;
+        }
+
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(PlaybackRequest::Stop) => {
+                if let Some(sink) = &local_sink {
+                    sink.stop();
+                }
+                if let Some(sink) = &virtual_sink {
+                    sink.stop();
+                }
+                pending_requests.clear();
+                return;
+            }
+            Ok(next_request) => {
+                pending_requests.push_back(next_request);
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        }
     }
 }
 

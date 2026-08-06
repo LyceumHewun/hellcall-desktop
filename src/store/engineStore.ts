@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
 export type EngineStatus = "OFFLINE" | "STARTING" | "ACTIVE";
+export type AiRuntimeStatus = "OFFLINE" | "WARMING_UP" | "READY";
+export type AiWarmupStage =
+  | "LOADING_RUNTIME"
+  | "LOADING_STT"
+  | "LOADING_TTS"
+  | null;
 const VOSK_MODEL_STORAGE_KEY = "hellcall.selectedVoskModelId";
 const DEFAULT_VOSK_MODEL_ID = "vosk-model-small-cn-0.22";
 const VISION_MODEL_STORAGE_KEY = "hellcall.selectedVisionModelId";
@@ -18,6 +24,10 @@ const getStoredModelId = (storageKey: string, fallback: string) => {
 interface EngineState {
   status: EngineStatus;
   setStatus: (status: EngineStatus) => void;
+  aiStatus: AiRuntimeStatus;
+  setAiStatus: (status: AiRuntimeStatus) => void;
+  aiWarmupStage: AiWarmupStage;
+  setAiWarmupStage: (stage: AiWarmupStage) => void;
   lastStartedConfigSignature: string | null;
   setLastStartedConfigSignature: (signature: string | null) => void;
   selectedDevice: string | null;
@@ -35,6 +45,10 @@ interface EngineState {
 export const useEngineStore = create<EngineState>((set) => ({
   status: "OFFLINE",
   setStatus: (status) => set({ status }),
+  aiStatus: "OFFLINE",
+  setAiStatus: (status) => set({ aiStatus: status }),
+  aiWarmupStage: null,
+  setAiWarmupStage: (stage) => set({ aiWarmupStage: stage }),
   lastStartedConfigSignature: null,
   setLastStartedConfigSignature: (signature) =>
     set({ lastStartedConfigSignature: signature }),

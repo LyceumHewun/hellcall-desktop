@@ -235,6 +235,18 @@ impl KeyPresser {
         }
     }
 
+    pub fn enqueue(&self, keys: &[LocalKey], fast: bool) {
+        if keys.is_empty() {
+            return;
+        }
+
+        if let Some(tx) = &self.tx {
+            if let Err(e) = tx.send((keys.to_vec(), fast)) {
+                log::error!("enqueue send error: {:?}", e);
+            }
+        }
+    }
+
     /// 注册一个全局按键监听器
     ///
     /// 当指定的按键 `key` 被按下或释放时，会触发 `callback` 函数。
