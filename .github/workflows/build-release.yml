@@ -35,8 +35,8 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Setup Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: x86_64-pc-windows-msvc
 
