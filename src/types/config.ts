@@ -1,4 +1,5 @@
 export type TalkMode = "push_to_talk" | "voice_activation";
+export type CloseBehavior = "ask" | "exit" | "minimize_to_tray";
 
 export interface RecognizerConfig {
   chunk_time: number;
@@ -47,6 +48,7 @@ export interface SpeakerConfig {
 }
 
 export interface AppConfig {
+  close_behavior: CloseBehavior;
   vision: VisionConfig;
   microphone: MicrophoneConfig;
   speaker: SpeakerConfig;

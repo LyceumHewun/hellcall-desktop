@@ -1,11 +1,14 @@
 import { Mic, Minus, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-export function CustomTitlebar() {
+interface CustomTitlebarProps {
+  onClose: () => void;
+}
+
+export function CustomTitlebar({ onClose }: CustomTitlebarProps) {
   const appWindow = getCurrentWindow();
 
   const handleMinimize = () => appWindow.minimize();
-  const handleClose = () => appWindow.close();
 
   return (
     <div
@@ -38,7 +41,7 @@ export function CustomTitlebar() {
           <Minus className="w-4 h-4 text-white/70 pointer-events-none" />
         </button>
         <button
-          onClick={handleClose}
+          onClick={onClose}
           className="w-12 h-full flex items-center justify-center hover:bg-red-600 transition-colors bg-transparent hover:text-white"
         >
           <X className="w-4 h-4 text-white/70 pointer-events-none" />

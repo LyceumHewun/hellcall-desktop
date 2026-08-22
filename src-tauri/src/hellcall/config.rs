@@ -68,6 +68,7 @@ impl Default for VisionConfig {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(default)]
 pub struct Config {
+    pub close_behavior: CloseBehavior,
     #[serde(default)]
     pub vision: VisionConfig,
     #[serde(default)]
@@ -113,6 +114,15 @@ pub struct SpeakerConfig {
     pub virtual_mic_macro_volume: f32,
     #[serde(default = "default_virtual_mic_input_volume")]
     pub virtual_mic_input_volume: f32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseBehavior {
+    #[default]
+    Ask,
+    Exit,
+    MinimizeToTray,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -163,6 +173,7 @@ pub struct CommandConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            close_behavior: CloseBehavior::Ask,
             vision: VisionConfig::default(),
             microphone: MicrophoneConfig::default(),
             speaker: SpeakerConfig::default(),

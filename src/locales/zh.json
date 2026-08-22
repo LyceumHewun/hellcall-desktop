@@ -56,6 +56,11 @@
     "subtitle": "调整语音识别与按键引擎行为",
     "app_preferences": "应用偏好",
     "language": "语言 / Language",
+    "close_behavior": "关闭窗口时",
+    "close_behavior_ask": "每次询问",
+    "close_behavior_exit": "直接退出",
+    "close_behavior_tray": "最小化到托盘",
+    "close_behavior_desc": "设置点击标题栏关闭按钮时执行的操作。",
     "trigger": "Trigger",
     "hit_word": "唤醒词",
     "hit_word_grammar": "唤醒词语法",
@@ -113,6 +118,19 @@
     "enable_occ": "启用OCC (一键搓终端指令)",
     "enable_occ_desc": "截屏识别到合法的方向指令后，利用宏引擎按键自动输出。",
     "capture_ratio": "截屏缩放判定比例 ({{val}}x)"
+  },
+  "close_dialog": {
+    "title": "关闭 HellCall？",
+    "description": "请选择关闭主窗口时要执行的操作。",
+    "minimize": "最小化到托盘",
+    "minimize_desc": "隐藏窗口，让 HellCall 和后台任务继续运行。",
+    "exit": "直接退出",
+    "exit_desc": "退出应用并停止所有正在运行的后台任务。",
+    "remember": "记住我的选择",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save_failed": "无法保存关闭窗口设置。",
+    "close_failed": "无法执行所选的关闭窗口操作。"
   },
   "log": {
     "waiting": "等待日志...",
