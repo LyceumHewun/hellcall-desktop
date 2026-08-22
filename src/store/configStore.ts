@@ -10,9 +10,27 @@ interface ConfigState {
   updateConfig: (
     updater: (draft: AppConfig) => void | Partial<AppConfig>,
   ) => void;
+  updateConfigImmediately: (
+    updater: (draft: AppConfig) => void | Partial<AppConfig>,
+  ) => Promise<void>;
 }
 
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function createUpdatedConfig(
+  config: AppConfig,
+  updater: (draft: AppConfig) => void | Partial<AppConfig>,
+) {
+  const newConfig = JSON.parse(JSON.stringify(config)) as AppConfig;
+  const result = updater(newConfig);
+  if (result) Object.assign(newConfig, result);
+  return newConfig;
+}
+
+async function saveConfig(config: AppConfig) {
+  const sanitizedConfig = sanitizeConfigForEngine(config);
+  await invoke("save_config", { newConfig: sanitizedConfig });
+}
 
 export const useConfigStore = create<ConfigState>((set, get) => ({
   config: null,
@@ -37,12 +55,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     set((state) => {
       if (!state.config) return state;
 
-      const newConfig = JSON.parse(JSON.stringify(state.config));
-
-      const result = updater(newConfig);
-      if (result) {
-        Object.assign(newConfig, result);
-      }
+      const newConfig = createUpdatedConfig(state.config, updater);
 
       // Debounce saving to backend
       if (saveTimeout) {
@@ -51,8 +64,7 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
       saveTimeout = setTimeout(async () => {
         try {
-          const sanitizedConfig = sanitizeConfigForEngine(newConfig);
-          await invoke("save_config", { newConfig: sanitizedConfig });
+          await saveConfig(newConfig);
           console.log("Config saved successfully");
         } catch (error) {
           console.error("Failed to save config:", error);
@@ -61,5 +73,26 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       }, 500);
       return { config: newConfig };
     });
+  },
+
+  updateConfigImmediately: async (updater) => {
+    const config = get().config;
+    if (!config) return;
+
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+
+    const newConfig = createUpdatedConfig(config, updater);
+    set({ config: newConfig });
+
+    try {
+      await saveConfig(newConfig);
+    } catch (error) {
+      console.error("Failed to save config:", error);
+      await get().fetchConfig();
+      throw error;
+    }
   },
 }));

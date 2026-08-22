@@ -29,7 +29,7 @@ import { useEngineStore } from "../../store/engineStore";
 import { useTranslation } from "react-i18next";
 
 export function GlobalSettingsView() {
-  const { config, updateConfig } = useConfigStore();
+  const { config, updateConfig, updateConfigImmediately } = useConfigStore();
   const { t, i18n } = useTranslation();
   const { status, selectedDevice, setSelectedDevice } = useEngineStore();
   const isEngineRunning = status === "STARTING" || status === "ACTIVE";
@@ -203,6 +203,35 @@ export function GlobalSettingsView() {
                     <SelectItem value="zh">简体中文</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("settings.close_behavior")}</Label>
+                <Select
+                  value={config.close_behavior}
+                  onValueChange={(value) =>
+                    updateConfigImmediately((draft) => {
+                      draft.close_behavior = value as typeof config.close_behavior;
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full bg-black/30 border-white/10 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1E2128] border-white/10 text-white">
+                    <SelectItem value="ask">
+                      {t("settings.close_behavior_ask")}
+                    </SelectItem>
+                    <SelectItem value="exit">
+                      {t("settings.close_behavior_exit")}
+                    </SelectItem>
+                    <SelectItem value="minimize_to_tray">
+                      {t("settings.close_behavior_tray")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-white/50">
+                  {t("settings.close_behavior_desc")}
+                </p>
               </div>
             </CardContent>
           </Card>

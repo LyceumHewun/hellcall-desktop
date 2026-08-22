@@ -4,17 +4,19 @@ mod stratagems;
 mod utils;
 
 use asset_manager::{vision_model_manager, vosk_model_manager};
-use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use hellcall::core::microphone::{
     open_volume_meter_stream, validate_virtual_output_device_for_mix,
 };
+use hellcall::{load_config_from_path, save_config_to_path, Config, EngineHandle, HellcallEngine};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use stratagems::StratagemCatalog;
+use tauri::menu::{Menu, MenuItem};
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Manager, State};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Manager, State, Wry};
 use tauri_plugin_log::{Target, TargetKind};
 
 enum AppEngine {
@@ -31,6 +33,79 @@ struct AppState {
     engine: Mutex<AppEngine>,
     mic_test_stream: Mutex<Option<UnsafeStreamWrapper>>,
     cached_vosk_runtime_model_paths: Mutex<HashMap<String, PathBuf>>,
+    tray_menu_items: Mutex<Option<TrayMenuItems>>,
+}
+
+struct TrayMenuItems {
+    show: MenuItem<Wry>,
+    exit: MenuItem<Wry>,
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "tray-show", "Show HellCall", true, None::<&str>)?;
+    let exit = MenuItem::with_id(app, "tray-exit", "Exit HellCall", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &exit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .tooltip("HellCall")
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-show" => show_main_window(app),
+            "tray-exit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(event, TrayIconEvent::DoubleClick { .. }) {
+                show_main_window(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+
+    builder.build(app)?;
+    app.state::<AppState>()
+        .tray_menu_items
+        .lock()
+        .expect("tray menu state poisoned")
+        .replace(TrayMenuItems { show, exit });
+    Ok(())
+}
+
+#[tauri::command]
+fn set_tray_language(state: State<'_, AppState>, language: String) -> Result<(), String> {
+    let items = state.tray_menu_items.lock().map_err(|e| e.to_string())?;
+    let Some(items) = items.as_ref() else {
+        return Err("Tray menu is not initialized".to_string());
+    };
+
+    let is_chinese = language.starts_with("zh");
+    items
+        .show
+        .set_text(if is_chinese {
+            "显示主窗口"
+        } else {
+            "Show HellCall"
+        })
+        .map_err(|e| e.to_string())?;
+    items
+        .exit
+        .set_text(if is_chinese {
+            "退出 HellCall"
+        } else {
+            "Exit HellCall"
+        })
+        .map_err(|e| e.to_string())
 }
 
 fn resolve_audio_dir(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -345,14 +420,11 @@ fn start_mic_test(
 ) -> Result<(), String> {
     use tauri::Emitter;
 
-    let stream = open_volume_meter_stream(
-        device_name,
-        microphone_config.enable_denoise,
-        move |rms| {
-        let _ = app_handle.emit("mic_volume", rms);
-        },
-    )
-    .map_err(|e| utils::format_and_log_error("Failed to start mic test", e))?;
+    let stream =
+        open_volume_meter_stream(device_name, microphone_config.enable_denoise, move |rms| {
+            let _ = app_handle.emit("mic_volume", rms);
+        })
+        .map_err(|e| utils::format_and_log_error("Failed to start mic test", e))?;
 
     let mut stream_guard = state.mic_test_stream.lock().map_err(|e| e.to_string())?;
     *stream_guard = Some(UnsafeStreamWrapper(stream));
@@ -381,11 +453,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -394,6 +462,11 @@ pub fn run() {
             engine: Mutex::new(AppEngine::None),
             mic_test_stream: Mutex::new(None),
             cached_vosk_runtime_model_paths: Mutex::new(HashMap::new()),
+            tray_menu_items: Mutex::new(None),
+        })
+        .setup(|app| {
+            setup_tray(app.handle())?;
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_available_vosk_models,
@@ -407,6 +480,7 @@ pub fn run() {
             get_audio_directory,
             start_mic_test,
             stop_mic_test,
+            set_tray_language,
             load_config,
             load_stratagems,
             refresh_stratagems,

@@ -56,6 +56,11 @@
     "subtitle": "Tweak voice recognition and presser engine behaviors",
     "app_preferences": "App Preferences",
     "language": "Language",
+    "close_behavior": "When closing the window",
+    "close_behavior_ask": "Ask every time",
+    "close_behavior_exit": "Exit the application",
+    "close_behavior_tray": "Minimize to the system tray",
+    "close_behavior_desc": "Controls what the title-bar close button does.",
     "trigger": "Trigger",
     "hit_word": "Hit Word",
     "hit_word_grammar": "Hit Word Grammar",
@@ -113,6 +118,19 @@
     "enable_occ": "Enable OCC (One-Click Completion)",
     "enable_occ_desc": "Automatically execute the recognized Console Arrow sequence using macro engine.",
     "capture_ratio": "Capture Zoom Ratio ({{val}}x)"
+  },
+  "close_dialog": {
+    "title": "Close HellCall?",
+    "description": "Choose what should happen when you close the main window.",
+    "minimize": "Minimize to the system tray",
+    "minimize_desc": "Hide the window and keep HellCall running in the background.",
+    "exit": "Exit the application",
+    "exit_desc": "Stop the application and all running background tasks.",
+    "remember": "Remember my choice",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save_failed": "Could not save the close-window preference.",
+    "close_failed": "Could not perform the selected close action."
   },
   "log": {
     "waiting": "Waiting for logs...",
