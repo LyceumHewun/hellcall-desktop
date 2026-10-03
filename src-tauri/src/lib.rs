@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use stratagems::StratagemCatalog;
+use stratagems::{StratagemCatalog, StratagemLanguage};
 use tauri::menu::{Menu, MenuItem};
 use tauri::path::BaseDirectory;
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -288,8 +288,11 @@ fn load_stratagems(app: AppHandle) -> Result<StratagemCatalog, String> {
 }
 
 #[tauri::command]
-async fn refresh_stratagems(app: AppHandle) -> Result<StratagemCatalog, String> {
-    stratagems::refresh_catalog(&app).await
+async fn refresh_stratagems(
+    app: AppHandle,
+    language: StratagemLanguage,
+) -> Result<StratagemCatalog, String> {
+    stratagems::refresh_catalog(&app, language).await
 }
 
 #[tauri::command]

@@ -141,6 +141,8 @@
     "subtitle": "从 Helldivers Wiki 缓存并展示全部战备指令",
     "loading": "正在加载战备缓存...",
     "update": "更新",
+    "language_title": "选择战备语言",
+    "language_description": "选择 Wiki 语言后立即更新战备指令库。",
     "updating": "更新中...",
     "update_success": "战备数据已更新。",
     "update_failed": "更新战备数据失败。",

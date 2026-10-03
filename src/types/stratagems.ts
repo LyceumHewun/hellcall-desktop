@@ -1,4 +1,5 @@
 export type StratagemDirection = "UP" | "DOWN" | "LEFT" | "RIGHT";
+export type StratagemLanguage = "en" | "zh";
 
 export interface StratagemItem {
   id: string;

@@ -1,11 +1,19 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, SatelliteDish } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { KeySequence } from "../components/KeySequence";
-import { StratagemCatalog } from "../../types/stratagems";
+import { StratagemCatalog, StratagemLanguage } from "../../types/stratagems";
 import { useStratagemsStore } from "../../store/stratagemsStore";
+import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 
 type SectionGroup = {
   section: string;
@@ -17,6 +25,8 @@ type SectionGroup = {
 
 export function StratagemsView() {
   const { t } = useTranslation();
+  const [isLanguageDialogOpen, setIsLanguageDialogOpen] = useState(false);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const {
     catalog,
     isLoading,
@@ -36,9 +46,10 @@ export function StratagemsView() {
     });
   }, [fetchCatalog, t]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (language: StratagemLanguage) => {
+    setIsLanguageDialogOpen(false);
     try {
-      await refreshCatalog();
+      await refreshCatalog(language);
       toast.success(t("stratagems.update_success"));
     } catch (error) {
       const message =
@@ -76,6 +87,41 @@ export function StratagemsView() {
 
   return (
     <>
+      <Dialog open={isLanguageDialogOpen} onOpenChange={setIsLanguageDialogOpen}>
+        <DialogContent
+          className="border-zinc-800 bg-[#151922] text-white sm:max-w-sm"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            refreshButtonRef.current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <RefreshCw className="h-5 w-5 text-[#FCE100]" />
+              {t("stratagems.language_title")}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              {t("stratagems.language_description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={() => void handleRefresh("en")}
+              disabled={isRefreshing}
+              className="border border-[#FCE100] bg-transparent text-[#FCE100] hover:bg-[#FCE100]/10"
+            >
+              English
+            </Button>
+            <Button
+              onClick={() => void handleRefresh("zh")}
+              disabled={isRefreshing}
+              className="border border-[#FCE100] bg-transparent text-[#FCE100] hover:bg-[#FCE100]/10"
+            >
+              中文
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="border-b border-white/10 p-6 shrink-0 bg-gradient-to-b from-[#0F1115] to-transparent backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div>
@@ -89,7 +135,8 @@ export function StratagemsView() {
           </div>
 
           <button
-            onClick={handleRefresh}
+            ref={refreshButtonRef}
+            onClick={() => setIsLanguageDialogOpen(true)}
             disabled={isRefreshing}
             className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#FCE100] text-[#FCE100] rounded hover:bg-[#FCE100]/10 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           >

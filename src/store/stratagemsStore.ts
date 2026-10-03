@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { StratagemCatalog } from "../types/stratagems";
+import { StratagemCatalog, StratagemLanguage } from "../types/stratagems";
 
 interface StratagemsState {
   catalog: StratagemCatalog | null;
@@ -8,7 +8,7 @@ interface StratagemsState {
   isRefreshing: boolean;
   hasLoaded: boolean;
   fetchCatalog: (force?: boolean) => Promise<void>;
-  refreshCatalog: () => Promise<StratagemCatalog>;
+  refreshCatalog: (language: StratagemLanguage) => Promise<StratagemCatalog>;
 }
 
 export const useStratagemsStore = create<StratagemsState>((set, get) => ({
@@ -37,10 +37,10 @@ export const useStratagemsStore = create<StratagemsState>((set, get) => ({
     }
   },
 
-  refreshCatalog: async () => {
+  refreshCatalog: async (language) => {
     try {
       set({ isRefreshing: true });
-      const catalog = await invoke<StratagemCatalog>("refresh_stratagems");
+      const catalog = await invoke<StratagemCatalog>("refresh_stratagems", { language });
       set({
         catalog,
         isRefreshing: false,
