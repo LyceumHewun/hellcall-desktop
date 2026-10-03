@@ -13,6 +13,43 @@ const WIKI_API_URL: &str =
 const CURRENT_STRATAGEMS_SECTION: &str = "Current Stratagems";
 const MISSION_STRATAGEMS_SECTION: &str = "Mission Stratagems";
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StratagemLanguage {
+    En,
+    Zh,
+}
+
+impl StratagemLanguage {
+    fn page_url(self) -> &'static str {
+        match self {
+            Self::En => WIKI_PAGE_URL,
+            Self::Zh => "https://helldivers.wiki.gg/zh/wiki/%E6%88%98%E7%95%A5%E9%85%8D%E5%A4%87",
+        }
+    }
+
+    fn api_url(self) -> &'static str {
+        match self {
+            Self::En => WIKI_API_URL,
+            Self::Zh => "https://helldivers.wiki.gg/zh/api.php?action=parse&page=战略配备&prop=text&format=json",
+        }
+    }
+
+    fn sections(self) -> (&'static str, &'static str) {
+        match self {
+            Self::En => (CURRENT_STRATAGEMS_SECTION, MISSION_STRATAGEMS_SECTION),
+            Self::Zh => ("当前战略配备", "任务所需战略配备"),
+        }
+    }
+
+    fn column_headers(self) -> [&'static str; 3] {
+        match self {
+            Self::En => ["Icon", "Name", "Stratagem Code"],
+            Self::Zh => ["图标", "名称", "战略配备代码"],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StratagemCatalog {
@@ -63,16 +100,19 @@ pub fn load_catalog(app_handle: &AppHandle) -> Result<StratagemCatalog, String> 
     load_catalog_from_path(&cache_path)
 }
 
-pub async fn refresh_catalog(app_handle: &AppHandle) -> Result<StratagemCatalog, String> {
+pub async fn refresh_catalog(
+    app_handle: &AppHandle,
+    language: StratagemLanguage,
+) -> Result<StratagemCatalog, String> {
     let client = reqwest::Client::builder()
         .user_agent("Hellcall Desktop Stratagem Updater/1.0")
         .build()
         .map_err(|e| e.to_string())?;
 
-    let html = fetch_stratagem_page_html(&client).await?;
-    let items = parse_stratagems_from_html(&html)?;
+    let html = fetch_stratagem_page_html(&client, language).await?;
+    let items = parse_stratagems_from_html(&html, language)?;
 
-    if !has_complete_stratagem_sections(&items) {
+    if !has_complete_stratagem_sections(&items, language) {
         return Err(
             "Parsed stratagem data was incomplete; keeping the existing cached catalog."
                 .to_string(),
@@ -81,7 +121,7 @@ pub async fn refresh_catalog(app_handle: &AppHandle) -> Result<StratagemCatalog,
 
     let catalog = StratagemCatalog {
         updated_at_unix: Some(current_unix_timestamp()),
-        source_url: WIKI_PAGE_URL.to_string(),
+        source_url: language.page_url().to_string(),
         items: items
             .into_iter()
             .map(|item| Stratagem {
@@ -111,7 +151,9 @@ fn save_catalog_to_path(path: &Path, catalog: &StratagemCatalog) -> Result<(), S
     }
 
     let content = toml::to_string_pretty(catalog).map_err(|e| e.to_string())?;
-    fs::write(path, content).map_err(|e| e.to_string())
+    let temporary_path = path.with_extension("toml.tmp");
+    fs::write(&temporary_path, content).map_err(|e| e.to_string())?;
+    fs::rename(&temporary_path, path).map_err(|e| e.to_string())
 }
 
 fn load_catalog_from_path(path: &Path) -> Result<StratagemCatalog, String> {
@@ -161,8 +203,11 @@ fn compute_stratagem_id(command: &[String]) -> String {
     STANDARD.encode(command.join(","))
 }
 
-async fn fetch_stratagem_page_html(client: &reqwest::Client) -> Result<String, String> {
-    match fetch_stratagem_page_html_from_api(client).await {
+async fn fetch_stratagem_page_html(
+    client: &reqwest::Client,
+    language: StratagemLanguage,
+) -> Result<String, String> {
+    match fetch_stratagem_page_html_from_api(client, language).await {
         Ok(html) => return Ok(html),
         Err(error) => {
             log::warn!(
@@ -172,12 +217,15 @@ async fn fetch_stratagem_page_html(client: &reqwest::Client) -> Result<String, S
         }
     }
 
-    fetch_stratagem_page_html_from_page(client).await
+    fetch_stratagem_page_html_from_page(client, language).await
 }
 
-async fn fetch_stratagem_page_html_from_api(client: &reqwest::Client) -> Result<String, String> {
+async fn fetch_stratagem_page_html_from_api(
+    client: &reqwest::Client,
+    language: StratagemLanguage,
+) -> Result<String, String> {
     let payload = client
-        .get(WIKI_API_URL)
+        .get(language.api_url())
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -196,8 +244,11 @@ async fn fetch_stratagem_page_html_from_api(client: &reqwest::Client) -> Result<
     Ok(html)
 }
 
-async fn fetch_stratagem_page_html_from_page(client: &reqwest::Client) -> Result<String, String> {
-    match client.get(WIKI_PAGE_URL).send().await {
+async fn fetch_stratagem_page_html_from_page(
+    client: &reqwest::Client,
+    language: StratagemLanguage,
+) -> Result<String, String> {
+    match client.get(language.page_url()).send().await {
         Ok(response) if response.status().is_success() => {
             let html = response.text().await.map_err(|e| e.to_string())?;
             if is_valid_wiki_html(&html) {
@@ -222,7 +273,10 @@ fn is_valid_wiki_html(html: &str) -> bool {
     !looks_like_cloudflare_challenge(html) && html.contains("mw-parser-output")
 }
 
-fn parse_stratagems_from_html(html: &str) -> Result<Vec<Stratagem>, String> {
+fn parse_stratagems_from_html(
+    html: &str,
+    language: StratagemLanguage,
+) -> Result<Vec<Stratagem>, String> {
     let document = Html::parse_document(html);
     let container_selector =
         Selector::parse(".mw-parser-output").map_err(|e| format!("Invalid selector: {}", e))?;
@@ -244,28 +298,29 @@ fn parse_stratagems_from_html(html: &str) -> Result<Vec<Stratagem>, String> {
             continue;
         };
         let summary_text = extract_text(&summary);
-        let Some(section) = classify_stratagem_summary(&summary_text) else {
+        let Some(section) = classify_stratagem_summary(&summary_text, language) else {
             continue;
         };
-        let category = if section == MISSION_STRATAGEMS_SECTION {
-            MISSION_STRATAGEMS_SECTION.to_string()
+        let category = if section == language.sections().1 {
+            section.to_string()
         } else {
             summary_text
         };
 
         for table in details.select(&table_selector) {
-            if !table_has_required_columns(&table) {
-                continue;
-            }
-
-            items.extend(parse_stratagem_table(&table, section, &category));
+            items.extend(parse_stratagem_table(&table, section, &category, language));
         }
     }
 
     Ok(items)
 }
 
-fn parse_stratagem_table(table: &ElementRef<'_>, section: &str, category: &str) -> Vec<Stratagem> {
+fn parse_stratagem_table(
+    table: &ElementRef<'_>,
+    section: &str,
+    category: &str,
+    language: StratagemLanguage,
+) -> Vec<Stratagem> {
     let row_selector = Selector::parse("tr").expect("valid row selector");
     let rows = table.select(&row_selector).collect::<Vec<_>>();
     if rows.is_empty() {
@@ -273,9 +328,14 @@ fn parse_stratagem_table(table: &ElementRef<'_>, section: &str, category: &str) 
     }
 
     let header_cells = direct_cells(&rows[0]);
-    let icon_index = find_column_index(&header_cells, "Icon").unwrap_or(0);
-    let name_index = find_column_index(&header_cells, "Name").unwrap_or(1);
-    let command_index = find_column_index(&header_cells, "Stratagem Code").unwrap_or(2);
+    let [icon_header, name_header, command_header] = language.column_headers();
+    let (Some(icon_index), Some(name_index), Some(command_index)) = (
+        find_column_index(&header_cells, icon_header),
+        find_column_index(&header_cells, name_header),
+        find_column_index(&header_cells, command_header),
+    ) else {
+        return Vec::new();
+    };
     let required_index = icon_index.max(name_index).max(command_index);
 
     rows.iter()
@@ -305,39 +365,25 @@ fn parse_stratagem_table(table: &ElementRef<'_>, section: &str, category: &str) 
         .collect()
 }
 
-fn table_has_required_columns(table: &ElementRef<'_>) -> bool {
-    let row_selector = Selector::parse("tr").expect("valid row selector");
-    let Some(header_row) = table.select(&row_selector).next() else {
-        return false;
-    };
-
-    let header_cells = direct_cells(&header_row);
-    find_column_index(&header_cells, "Icon").is_some()
-        && find_column_index(&header_cells, "Name").is_some()
-        && find_column_index(&header_cells, "Stratagem Code").is_some()
-}
-
-fn classify_stratagem_summary(summary: &str) -> Option<&'static str> {
+fn classify_stratagem_summary(summary: &str, language: StratagemLanguage) -> Option<&'static str> {
     let normalized_summary = normalize_whitespace(summary);
     if normalized_summary.is_empty() {
         return None;
     }
 
-    if normalized_summary.eq_ignore_ascii_case(MISSION_STRATAGEMS_SECTION) {
-        Some(MISSION_STRATAGEMS_SECTION)
+    let (current_section, mission_section) = language.sections();
+    if normalized_summary.eq_ignore_ascii_case(mission_section) {
+        Some(mission_section)
     } else {
-        Some(CURRENT_STRATAGEMS_SECTION)
+        Some(current_section)
     }
 }
 
-fn has_complete_stratagem_sections(items: &[Stratagem]) -> bool {
+fn has_complete_stratagem_sections(items: &[Stratagem], language: StratagemLanguage) -> bool {
+    let (current_section, mission_section) = language.sections();
     !items.is_empty()
-        && items
-            .iter()
-            .any(|item| item.section == CURRENT_STRATAGEMS_SECTION)
-        && items
-            .iter()
-            .any(|item| item.section == MISSION_STRATAGEMS_SECTION)
+        && items.iter().any(|item| item.section == current_section)
+        && items.iter().any(|item| item.section == mission_section)
 }
 
 fn direct_cells<'a>(row: &'a ElementRef<'a>) -> Vec<ElementRef<'a>> {
@@ -461,8 +507,9 @@ fn current_unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        has_complete_stratagem_sections, parse_stratagems_from_html, Stratagem,
-        CURRENT_STRATAGEMS_SECTION, MISSION_STRATAGEMS_SECTION,
+        compute_stratagem_id, has_complete_stratagem_sections, load_catalog_from_path,
+        parse_stratagems_from_html, save_catalog_to_path, Stratagem, StratagemCatalog,
+        StratagemLanguage, CURRENT_STRATAGEMS_SECTION, MISSION_STRATAGEMS_SECTION,
     };
 
     const DETAILS_FIXTURE: &str = r#"
@@ -514,7 +561,8 @@ mod tests {
 
     #[test]
     fn parse_stratagems_uses_details_summary_grouping() {
-        let items = parse_stratagems_from_html(DETAILS_FIXTURE).expect("fixture should parse");
+        let items = parse_stratagems_from_html(DETAILS_FIXTURE, StratagemLanguage::En)
+            .expect("fixture should parse");
 
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].section, CURRENT_STRATAGEMS_SECTION);
@@ -525,7 +573,8 @@ mod tests {
 
     #[test]
     fn parse_stratagems_extracts_direction_from_image_alt_and_text_fallback() {
-        let items = parse_stratagems_from_html(DETAILS_FIXTURE).expect("fixture should parse");
+        let items = parse_stratagems_from_html(DETAILS_FIXTURE, StratagemLanguage::En)
+            .expect("fixture should parse");
 
         assert_eq!(items[0].command, vec!["RIGHT", "RIGHT", "UP"]);
         assert_eq!(items[1].command, vec!["UP", "DOWN", "RIGHT", "LEFT", "UP"]);
@@ -533,7 +582,8 @@ mod tests {
 
     #[test]
     fn parse_stratagems_preserves_name_and_icon_with_extra_columns() {
-        let items = parse_stratagems_from_html(DETAILS_FIXTURE).expect("fixture should parse");
+        let items = parse_stratagems_from_html(DETAILS_FIXTURE, StratagemLanguage::En)
+            .expect("fixture should parse");
 
         assert_eq!(items[0].name, "Orbital Precision Strike");
         assert_eq!(
@@ -561,10 +611,169 @@ mod tests {
             command: vec!["UP".to_string()],
         }];
 
-        assert!(!has_complete_stratagem_sections(&current_only));
-        assert!(!has_complete_stratagem_sections(&mission_only));
-        assert!(has_complete_stratagem_sections(
-            &parse_stratagems_from_html(DETAILS_FIXTURE).expect("fixture should parse")
+        assert!(!has_complete_stratagem_sections(
+            &current_only,
+            StratagemLanguage::En
         ));
+        assert!(!has_complete_stratagem_sections(
+            &mission_only,
+            StratagemLanguage::En
+        ));
+        assert!(has_complete_stratagem_sections(
+            &parse_stratagems_from_html(DETAILS_FIXTURE, StratagemLanguage::En)
+                .expect("fixture should parse"),
+            StratagemLanguage::En,
+        ));
+    }
+
+    // Representative markup from the Chinese wiki, including English names in mission tables.
+    const CHINESE_FIXTURE: &str = r#"
+<div class="mw-parser-output">
+  <details>
+    <summary>轨道攻击</summary>
+    <table class="wikitable sortable"><tbody>
+      <tr><th>图标</th><th>名称</th><th>战略配备代码</th><th>基础冷却</th><th>来源</th></tr>
+      <tr>
+        <td><a class="image"><img src="https://helldivers.wiki.gg/images/orbital.svg?f73d52" /></a></td>
+        <td><a href="/zh/wiki/轨道加特林火力网">轨道加特林火力网</a></td>
+        <td>
+          <span><img alt="Stratagem Arrow Right.svg" /></span>
+          <span><img alt="Stratagem Arrow Down.svg" /></span>
+          <span><img alt="Stratagem Arrow Left.svg" /></span>
+          <span><img alt="Stratagem Arrow Up.svg" /></span>
+          <span><img alt="Stratagem Arrow Up.svg" /></span>
+        </td>
+        <td>70s</td><td>轨道加农炮</td>
+      </tr>
+    </tbody></table>
+  </details>
+  <details>
+    <summary>任务所需战略配备</summary>
+    <p>舰船</p>
+    <table class="wikitable sortable"><tbody>
+      <tr><th>图标</th><th>名称</th><th>战略配备代码</th><th>基础冷却</th></tr>
+      <tr><td><img src="/images/reinforce.svg" /></td><td><a>Reinforce</a></td><td>↑ ↓ → ← ↑</td><td>0s</td></tr>
+    </tbody></table>
+    <p>任务</p>
+    <table class="wikitable sortable"><tbody>
+      <tr><th>名称</th><th>战略配备代码</th><th>图标</th></tr>
+      <tr><td><a>地狱炸弹</a></td><td>↓ ↑ ← ↓ ↑ → ↓ ↑</td><td><img src="/images/hellbomb.svg" /></td></tr>
+    </tbody></table>
+    <table class="wikitable"><tr><th>名称</th></tr><tr><td>Ignore this unrelated table</td></tr></table>
+  </details>
+</div>
+"#;
+
+    #[test]
+    fn chinese_wiki_parses_localized_headers_categories_and_all_mission_tables() {
+        let items = parse_stratagems_from_html(CHINESE_FIXTURE, StratagemLanguage::Zh).unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].name, "轨道加特林火力网");
+        assert_eq!(items[0].section, "当前战略配备");
+        assert_eq!(items[0].category, "轨道攻击");
+        assert_eq!(
+            items[0].icon_url,
+            "https://helldivers.wiki.gg/images/orbital.svg?f73d52"
+        );
+        assert_eq!(items[0].command, ["RIGHT", "DOWN", "LEFT", "UP", "UP"]);
+        assert_eq!(items[1].name, "Reinforce");
+        assert_eq!(items[1].section, "任务所需战略配备");
+        assert_eq!(items[1].category, "任务所需战略配备");
+        assert_eq!(items[1].command, ["UP", "DOWN", "RIGHT", "LEFT", "UP"]);
+        assert_eq!(items[2].name, "地狱炸弹");
+        assert_eq!(
+            items[2].icon_url,
+            "https://helldivers.wiki.gg/images/hellbomb.svg"
+        );
+        assert!(has_complete_stratagem_sections(
+            &items,
+            StratagemLanguage::Zh
+        ));
+        assert!(!has_complete_stratagem_sections(
+            &items[..1],
+            StratagemLanguage::Zh
+        ));
+        assert!(!has_complete_stratagem_sections(
+            &items[1..],
+            StratagemLanguage::Zh
+        ));
+        assert!(!has_complete_stratagem_sections(
+            &items,
+            StratagemLanguage::En
+        ));
+    }
+
+    #[test]
+    fn wiki_language_is_explicit_and_matches_the_selected_source() {
+        assert!(matches!(
+            serde_json::from_str::<StratagemLanguage>("\"en\"").unwrap(),
+            StratagemLanguage::En
+        ));
+        assert!(matches!(
+            serde_json::from_str::<StratagemLanguage>("\"zh\"").unwrap(),
+            StratagemLanguage::Zh
+        ));
+        assert!(serde_json::from_str::<StratagemLanguage>("\"fr\"").is_err());
+        assert_eq!(StratagemLanguage::En.page_url(), super::WIKI_PAGE_URL);
+        assert_eq!(StratagemLanguage::En.api_url(), super::WIKI_API_URL);
+        assert!(StratagemLanguage::Zh.page_url().contains("/zh/wiki/"));
+        assert_eq!(StratagemLanguage::Zh.api_url(), "https://helldivers.wiki.gg/zh/api.php?action=parse&page=战略配备&prop=text&format=json");
+        assert!(
+            parse_stratagems_from_html(CHINESE_FIXTURE, StratagemLanguage::En)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn changing_language_replaces_the_same_cache_and_keeps_command_ids() {
+        let path = std::env::temp_dir().join(format!(
+            "hellcall-stratagem-language-{}.toml",
+            std::process::id()
+        ));
+        let english_items =
+            parse_stratagems_from_html(DETAILS_FIXTURE, StratagemLanguage::En).unwrap();
+        let english_mission_id = compute_stratagem_id(&english_items[1].command);
+        let mut catalog = StratagemCatalog {
+            updated_at_unix: Some(123),
+            source_url: StratagemLanguage::En.page_url().to_string(),
+            items: english_items,
+        };
+        save_catalog_to_path(&path, &catalog).unwrap();
+        catalog.source_url = StratagemLanguage::Zh.page_url().to_string();
+        catalog.items = parse_stratagems_from_html(CHINESE_FIXTURE, StratagemLanguage::Zh).unwrap();
+        for item in &mut catalog.items {
+            item.id = compute_stratagem_id(&item.command);
+        }
+        save_catalog_to_path(&path, &catalog).unwrap();
+        let loaded = load_catalog_from_path(&path).unwrap();
+        assert_eq!(loaded.source_url, StratagemLanguage::Zh.page_url());
+        assert_eq!(loaded.items.len(), 3);
+        assert_eq!(loaded.items[0].name, "轨道加特林火力网");
+        assert_eq!(loaded.items[1].id, english_mission_id);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn failed_cache_write_preserves_the_saved_catalog() {
+        let path = std::env::temp_dir().join(format!(
+            "hellcall-stratagem-write-failure-{}.toml",
+            std::process::id()
+        ));
+        save_catalog_to_path(&path, &StratagemCatalog::default()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let temporary_path = path.with_extension("toml.tmp");
+        std::fs::create_dir(&temporary_path).unwrap();
+        assert!(save_catalog_to_path(
+            &path,
+            &StratagemCatalog {
+                source_url: StratagemLanguage::Zh.page_url().to_string(),
+                ..StratagemCatalog::default()
+            }
+        )
+        .is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        std::fs::remove_dir(temporary_path).unwrap();
+        std::fs::remove_file(path).unwrap();
     }
 }

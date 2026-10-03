@@ -141,6 +141,8 @@
     "subtitle": "Cache and display the full Helldivers stratagem catalog from the wiki",
     "loading": "Loading stratagem cache...",
     "update": "Update",
+    "language_title": "Choose catalog language",
+    "language_description": "Select a wiki language to update the stratagem catalog.",
     "updating": "Updating...",
     "update_success": "Stratagem data updated.",
     "update_failed": "Failed to update stratagem data.",
